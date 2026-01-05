@@ -63,16 +63,21 @@ def joint_powers_l1(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEnt
     return torch.sum(torch.abs(torch.mul(asset.data.applied_torque, asset.data.joint_vel)), dim=1)
 
 
-def no_fly(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, threshold: float = 1.0) -> torch.Tensor:
-    """Reward if only one foot is in contact with the ground."""
-
+def fly_penalty(env: ManagerBasedRLEnv, threshold: float, sensor_cfg: SceneEntityCfg) -> torch.Tensor:
+    """Regulate feet contacts"""
+    # extract the used quantities (to enable type-hinting)
     contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
-    latest_contact_forces = contact_sensor.data.net_forces_w_history[:, 0, :, 2]
+    # check if contact force is above threshold
+    net_contact_forces = contact_sensor.data.net_forces_w
 
-    contacts = latest_contact_forces > threshold
-    single_contact = torch.sum(contacts.float(), dim=1) == 1
+    feet_contact_num = torch.sum(torch.norm(net_contact_forces, dim=-1) > threshold, dim=-1)
+    reward = feet_contact_num == 0
 
-    return 1.0 * single_contact
+    return reward
+
+
+def no_fly(env: ManagerBasedRLEnv, threshold: float, sensor_cfg: SceneEntityCfg) -> torch.Tensor:
+    return 1 - fly_penalty(env, threshold, sensor_cfg).float()
 
 
 def unbalance_feet_air_time(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg) -> torch.Tensor:
