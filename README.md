@@ -100,7 +100,7 @@ python scripts/rsl_rl/play.py --task=Isaac-Limx-PF-Blind-Flat-Play-v0 --num_envs
 
 - Real deployment details see section https://support.limxdynamics.com/docs/tron-1-sdk/rl-training-results-deployment 8.1 ~ 8.2
 
-**Overview of the learning framework.**
+## Overview of the learning framework
 
 <p align="center">
     <img alt="Figure2 of CTS" src="./media/learning_frame.png">
