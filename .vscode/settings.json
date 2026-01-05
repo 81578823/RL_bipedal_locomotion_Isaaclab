@@ -1,0 +1,17 @@
+{
+  "python.analysis.extraPaths": [
+        "/home/wbb/IsaacLab/source/isaaclab",
+        "/home/wbb/IsaacLab/source/isaaclab_tasks",
+        "/home/wbb/IsaacLab/source/isaaclab_rl",
+        "${workspaceFolder}",
+        "${workspaceFolder}/exts/bipedal_locomotion/bipedal_locomotion",
+    ],
+
+  "terminal.integrated.env.linux": {
+    "PATH": "/home/wbb/miniconda3/envs/PHL/bin:${env:PATH}"
+  },
+"python.defaultInterpreterPath": "/home/wbb/miniconda3/envs/PHL/bin/python",
+"python-envs.defaultEnvManager": "ms-python.python:conda",
+"python-envs.defaultPackageManager": "ms-python.python:conda",
+"python-envs.pythonProjects": []
+}
