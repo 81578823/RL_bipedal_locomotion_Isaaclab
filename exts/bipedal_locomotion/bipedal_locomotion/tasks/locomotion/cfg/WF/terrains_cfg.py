@@ -23,7 +23,7 @@ BLIND_ROUGH_TERRAINS_CFG = TerrainGeneratorCfg(
     horizontal_scale=0.1,
     vertical_scale=0.005,
     slope_threshold=0.75,
-    use_cache=True,
+    use_cache=False,
     sub_terrains={
         "flat": MeshPlaneTerrainCfg(proportion=0.25),
         "waves": HfWaveTerrainCfg(proportion=0.25, amplitude_range=(0.01, 0.06), num_waves=10, border_width=0.25),

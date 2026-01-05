@@ -30,7 +30,7 @@ BLIND_ROUGH_TERRAINS_CFG = TerrainGeneratorCfg(
     horizontal_scale=0.1,           # 水平分辨率 / Horizontal resolution
     vertical_scale=0.005,           # 垂直分辨率 / Vertical resolution
     slope_threshold=0.75,           # 斜率阈值 / Slope threshold
-    use_cache=True,                 # 使用缓存加速生成 / Use cache for faster generation
+    use_cache=False,                 # Do not use cache for faster generation
    
     # 子地形配置 - 定义不同类型的地形
     # Sub-terrain configurations - define different types of terrain
