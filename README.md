@@ -1,3 +1,7 @@
+<p align="center">
+    <img alt="SUSTech" src="./media/SUSTech_University_Logo.png" height="200">
+    <img alt="CLEARLAB" src="./media/clearlab.png" height="200">
+</p>
 # Bipedal Robot RL Locomotion Learning Project
 
 [![IsaacSim](https://img.shields.io/badge/IsaacSim-4.5.0-silver.svg)](https://docs.omniverse.nvidia.com/isaacsim/latest/overview.html)
@@ -24,19 +28,19 @@ With the help of [IsaacLab](https://github.com/isaac-sim/IsaacLab), we can train
 
 ```bash
 # Option 1: HTTPS
-git clone https://github.com/81578823/RL_bipedal_locomotion.git
+git clone https://github.com/81578823/RL_bipedal_locomotion_Isaaclab.git
 
 # Option 2: SSH
-git clone git@github.com:81578823/RL_bipedal_locomotion.git
+git clone git@github.com:81578823/RL_bipedal_locomotion_Isaaclab.git
 ```
 
 ```bash
 # Enter the repository
 conda activate isaaclab     # Or virtual environment you have created
-cd RL_bipedal_locomotion
+cd RL_bipedal_locomotion_Isaaclab
 ```
 
-- Using a python interpreter that has Isaac Lab installed, install the library
+- Using a python interpreter that has IsaacLab installed, install the library
 
 ```bash
 python -m pip install -e exts/bipedal_locomotion
@@ -45,7 +49,7 @@ python -m pip install -e exts/bipedal_locomotion
 - To use the mlp branch, install the library
 
 ```bash
-cd RL_bipedal_locomotion/rsl_rl
+cd RL_bipedal_locomotion_Isaaclab/rsl_rl
 python -m pip install -e .
 ```
 
