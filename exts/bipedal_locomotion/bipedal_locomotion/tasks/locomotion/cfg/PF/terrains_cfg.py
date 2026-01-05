@@ -96,14 +96,6 @@ BLIND_ROUGH_TERRAINS_CFG = TerrainGeneratorCfg(
             border_width=1.0,
             holes=False,
         ),
-        # pits 0.1
-        # "pits": terrain_gen.MeshPitTerrainCfg(
-        #     proportion=0.1, pit_depth_range=(0.05, 0.25), platform_width=2.0, double_pit=True
-        # ),
-        # stepping stones 0.2
-        "big_boxes": terrain_gen.MeshRandomGridTerrainCfg(
-            proportion=0.10, grid_width=0.9, grid_height_range=(0.025, 0.2), platform_width=2.0
-        ),
         "boxes": terrain_gen.MeshRandomGridTerrainCfg(
             proportion=0.10, grid_width=0.45, grid_height_range=(0.025, 0.18), platform_width=2.0
         ),
@@ -116,48 +108,6 @@ BLIND_ROUGH_TERRAINS_CFG = TerrainGeneratorCfg(
             platform_width=2.0,
             border_width=0.25,
         ),
-        # rails 0.05
-        "rails": terrain_gen.MeshRailsTerrainCfg(
-            proportion=0.05,
-            rail_thickness_range=(0.05, 0.1),
-            rail_height_range=(0.2, 0.05),
-            platform_width=2.0,
-        ),
-        # repeat_objects 0.15
-        "repeat_objects_1": terrain_gen.MeshRepeatedBoxesTerrainCfg(
-            proportion=0.1,
-            max_height_noise=0.08,
-            object_params_start=mesh_gen.MeshRepeatedBoxesTerrainCfg.ObjectCfg(
-                num_objects=80, height=0.1, size=(0.1, 0.1), max_yx_angle=45.0, degrees=True
-            ),
-            object_params_end=mesh_gen.MeshRepeatedBoxesTerrainCfg.ObjectCfg(
-                num_objects=80, height=0.1, size=(0.3, 0.3), max_yx_angle=180.0, degrees=True
-            ),
-            platform_width=2.0,
-        ),
-        "repeat_objects_2": terrain_gen.MeshRepeatedBoxesTerrainCfg(
-            proportion=0.05,
-            max_height_noise=0.08,
-            object_params_start=mesh_gen.MeshRepeatedBoxesTerrainCfg.ObjectCfg(
-                num_objects=40, height=0.1, size=(0.07, 0.5), max_yx_angle=0, degrees=True
-            ),
-            object_params_end=mesh_gen.MeshRepeatedBoxesTerrainCfg.ObjectCfg(
-                num_objects=80, height=0.2, size=(0.07, 0.8), max_yx_angle=30, degrees=True
-            ),
-            platform_width=2.0,
-        ),
-        # "gaps": terrain_gen.MeshGapTerrainCfg(
-        #     proportion=0.10,
-        #     gap_width_range=(0.08, 0.15),
-        #     platform_width=2.0,
-        # ),
-        # "star": terrain_gen.MeshStarTerrainCfg(
-        #     proportion=0.10,
-        #     num_bars=6,
-        #     bar_width_range=(0.2, 0.5),
-        #     bar_height_range=(0.5, 0.8),
-        #     platform_width=2.0,
-        # ),
     },
     
     curriculum=True,                    # 启用课程学习 / Enable curriculum learning
