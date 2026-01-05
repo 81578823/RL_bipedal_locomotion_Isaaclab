@@ -2,6 +2,7 @@
     <img alt="SUSTech" src="./media/SUSTech_University_Logo.png" height="200">
     <img alt="CLEARLAB" src="./media/clearlab.png" height="200">
 </p>
+
 # Bipedal Robot RL Locomotion Learning Project
 
 [![IsaacSim](https://img.shields.io/badge/IsaacSim-4.5.0-silver.svg)](https://docs.omniverse.nvidia.com/isaacsim/latest/overview.html)
