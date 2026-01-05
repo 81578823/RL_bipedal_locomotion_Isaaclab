@@ -4,6 +4,7 @@ from isaaclab.utils import configclass
 
 from bipedal_locomotion.assets.config.pointfoot_cfg import POINTFOOT_CFG
 from bipedal_locomotion.tasks.locomotion.cfg.PF.limx_base_env_cfg import PFEnvCfg
+from bipedal_locomotion.tasks.locomotion.cfg.PF.limx_pf_rough_env_cfg import PFRoughEnvCfg
 from bipedal_locomotion.tasks.locomotion.cfg.PF.terrains_cfg import (
     BLIND_ROUGH_TERRAINS_CFG,
     BLIND_ROUGH_TERRAINS_PLAY_CFG,
@@ -56,7 +57,55 @@ class PFBaseEnvCfg_PLAY(PFBaseEnvCfg):
         super().__post_init__()
 
         # make a smaller scene for play
-        self.scene.num_envs = 32
+        self.scene.num_envs = 10
+
+        # disable randomization for play
+        self.observations.policy.enable_corruption = False
+        # remove random pushing event
+        self.events.push_robot = None
+        # remove random base mass addition event
+        self.events.add_base_mass = None
+
+
+######################
+# 双足机器人粗糙地形环境 / Pointfoot Base Environment
+######################
+
+
+@configclass
+class PFRoughBaseEnvCfg(PFRoughEnvCfg):
+    """双足机器人基础环境配置 - 所有变体的共同基础 / Base environment configuration for pointfoot robot - common foundation for all variants"""
+    def __post_init__(self):
+        super().__post_init__()
+
+        self.scene.robot = POINTFOOT_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+        self.scene.robot.init_state.joint_pos = {
+            "abad_L_Joint": 0.0,
+            "abad_R_Joint": 0.0,
+            "hip_L_Joint": 0.0,
+            "hip_R_Joint": 0.0,
+            "knee_L_Joint": 0.0,
+            "knee_R_Joint": 0.0,
+        }
+        # 调整基座质量随机化参数 / Adjust base mass randomization parameters
+        self.events.add_base_mass.params["asset_cfg"].body_names = "base_Link"
+        self.events.add_base_mass.params["mass_distribution_params"] = (-1.0, 2.0)
+
+        # 设置基座接触终止条件 / Set base contact termination condition
+        self.terminations.base_contact.params["sensor_cfg"].body_names = "base_Link"
+        
+        # 更新视口相机设置 / Update viewport camera settings
+        self.viewer.origin_type = "env"  # 相机跟随环境 / Camera follows environment
+
+
+@configclass
+class PFRoughBaseEnvCfg_PLAY(PFRoughBaseEnvCfg):
+    """双足机器人基础测试环境配置 - 用于策略评估 / Base play environment configuration - for policy evaluation"""
+    def __post_init__(self):
+        super().__post_init__()
+
+        # make a smaller scene for play
+        self.scene.num_envs = 10
 
         # disable randomization for play
         self.observations.policy.enable_corruption = False
@@ -101,31 +150,31 @@ class PFBlindFlatEnvCfg_PLAY(PFBaseEnvCfg_PLAY):
 
 
 @configclass
-class PFBlindRoughEnvCfg(PFBaseEnvCfg):
+class PFBlindRoughEnvCfg(PFRoughBaseEnvCfg):
     def __post_init__(self):
         super().__post_init__()
 
-        self.scene.height_scanner = None
+        # self.scene.height_scanner = None
         self.observations.policy.heights = None
-        self.observations.critic.heights = None
+        # self.observations.critic.heights = None
 
         self.scene.terrain.terrain_type = "generator"
         self.scene.terrain.terrain_generator = BLIND_ROUGH_TERRAINS_CFG
 
 
 @configclass
-class PFBlindRoughEnvCfg_PLAY(PFBaseEnvCfg_PLAY):
+class PFBlindRoughEnvCfg_PLAY(PFRoughBaseEnvCfg_PLAY):
     def __post_init__(self):
         super().__post_init__()
         
-        self.scene.height_scanner = None
+        # self.scene.height_scanner = None
         self.observations.policy.heights = None
-        self.observations.critic.heights = None
+        # self.observations.critic.heights = None
 
         # spawn the robot randomly in the grid (instead of their terrain levels)
         self.scene.terrain.terrain_type = "generator"
         self.scene.terrain.max_init_terrain_level = None
-        self.scene.terrain.terrain_generator = BLIND_ROUGH_TERRAINS_PLAY_CFG
+        self.scene.terrain.terrain_generator = BLIND_ROUGH_TERRAINS_CFG
 
 
 ##############################

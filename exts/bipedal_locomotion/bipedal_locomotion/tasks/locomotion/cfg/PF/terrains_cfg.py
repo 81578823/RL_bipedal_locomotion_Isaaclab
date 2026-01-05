@@ -10,6 +10,11 @@ from isaaclab.terrains import (
     TerrainGeneratorCfg,
 )
 
+import isaaclab.terrains as terrain_gen
+import isaaclab.terrains.trimesh as mesh_gen
+
+stair_width = [0.25, 0.27, 0.29, 0.31, 0.33, 0.35]
+
 #############################
 # 粗糙地形配置 / Rough Terrain Configuration
 #############################
@@ -21,7 +26,7 @@ BLIND_ROUGH_TERRAINS_CFG = TerrainGeneratorCfg(
     size=(8.0, 8.0),               # 每个地形块大小 8x8米 / Each terrain tile size 8x8 meters
     border_width=20.0,              # 边界宽度 / Border width
     num_rows=10,                    # 地形行数 / Number of terrain rows
-    num_cols=16,                    # 地形列数 / Number of terrain columns
+    num_cols=20,                    # 地形列数 / Number of terrain columns
     horizontal_scale=0.1,           # 水平分辨率 / Horizontal resolution
     vertical_scale=0.005,           # 垂直分辨率 / Vertical resolution
     slope_threshold=0.75,           # 斜率阈值 / Slope threshold
@@ -30,32 +35,129 @@ BLIND_ROUGH_TERRAINS_CFG = TerrainGeneratorCfg(
     # 子地形配置 - 定义不同类型的地形
     # Sub-terrain configurations - define different types of terrain
     sub_terrains={
-        # 平地 (25%占比) / Flat terrain (25% proportion)
-        "flat": MeshPlaneTerrainCfg(proportion=0.25),
-        
-        # 波浪地形 (25%占比) / Wave terrain (25% proportion)  
-        "waves": HfWaveTerrainCfg(
-            proportion=0.25, 
-            amplitude_range=(0.01, 0.06),      # 波浪幅度范围 [m] / Wave amplitude range [m]
-            num_waves=10,                      # 波浪数量 / Number of waves
-            border_width=0.25                  # 边界宽度 / Border width
+        # slope 0.1
+        "hf_pyramid_slope": terrain_gen.HfPyramidSlopedTerrainCfg(
+            proportion=0.05, slope_range=(0.0, 0.5), platform_width=2.0, border_width=0.25
         ),
-        
-        # 随机格子地形 (25%占比) / Random grid terrain (25% proportion)
-        "boxes": MeshRandomGridTerrainCfg(
-            proportion=0.25, 
-            grid_width=0.15,                   # 格子宽度 / Grid width
-            grid_height_range=(0.01, 0.04),    # 格子高度范围 [m] / Grid height range [m]
-            platform_width=2.0                 # 平台宽度 / Platform width
+        "hf_pyramid_slope_inv": terrain_gen.HfInvertedPyramidSlopedTerrainCfg(
+            proportion=0.05, slope_range=(0.0, 0.5), platform_width=2.0, border_width=0.25
         ),
-        
-        # 随机粗糙地形 (25%占比) / Random rough terrain (25% proportion)
-        "random_rough": HfRandomUniformTerrainCfg(
-            proportion=0.25, 
-            noise_range=(0.01, 0.06),          # 噪声高度范围 [m] / Noise height range [m]
-            noise_step=0.01,                   # 噪声步长 / Noise step
-            border_width=0.25                  # 边界宽度 / Border width
+        # random rough 0.1
+        "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
+            proportion=0.10, noise_range=(0.02, 0.15), noise_step=0.01, border_width=0.25
         ),
+        # down stairs 0.15
+        "pyramid_stairs_1": terrain_gen.MeshPyramidStairsTerrainCfg(
+            proportion=0.05,
+            step_height_range=(0.05, 0.2),
+            step_width=stair_width[0],
+            platform_width=3.0,
+            border_width=1.0,
+            holes=False,
+        ),
+        "pyramid_stairs_2": terrain_gen.MeshPyramidStairsTerrainCfg(
+            proportion=0.05,
+            step_height_range=(0.05, 0.2),
+            step_width=stair_width[2],
+            platform_width=3.0,
+            border_width=1.0,
+            holes=False,
+        ),
+        "pyramid_stairs_3": terrain_gen.MeshPyramidStairsTerrainCfg(
+            proportion=0.05,
+            step_height_range=(0.05, 0.2),
+            step_width=stair_width[4],
+            platform_width=3.0,
+            border_width=1.0,
+            holes=False,
+        ),
+        # up stairs 0.15
+        "pyramid_stairs_inv_1": terrain_gen.MeshInvertedPyramidStairsTerrainCfg(
+            proportion=0.05,
+            step_height_range=(0.05, 0.2),
+            step_width=stair_width[1],
+            platform_width=3.0,
+            border_width=1.0,
+            holes=False,
+        ),
+        "pyramid_stairs_inv_2": terrain_gen.MeshInvertedPyramidStairsTerrainCfg(
+            proportion=0.05,
+            step_height_range=(0.05, 0.2),
+            step_width=stair_width[3],
+            platform_width=3.0,
+            border_width=1.0,
+            holes=False,
+        ),
+        "pyramid_stairs_inv_3": terrain_gen.MeshInvertedPyramidStairsTerrainCfg(
+            proportion=0.05,
+            step_height_range=(0.05, 0.2),
+            step_width=stair_width[5],
+            platform_width=3.0,
+            border_width=1.0,
+            holes=False,
+        ),
+        # pits 0.1
+        # "pits": terrain_gen.MeshPitTerrainCfg(
+        #     proportion=0.1, pit_depth_range=(0.05, 0.25), platform_width=2.0, double_pit=True
+        # ),
+        # stepping stones 0.2
+        "big_boxes": terrain_gen.MeshRandomGridTerrainCfg(
+            proportion=0.10, grid_width=0.9, grid_height_range=(0.025, 0.2), platform_width=2.0
+        ),
+        "boxes": terrain_gen.MeshRandomGridTerrainCfg(
+            proportion=0.10, grid_width=0.45, grid_height_range=(0.025, 0.18), platform_width=2.0
+        ),
+        "hf_stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
+            proportion=0.10,
+            stone_width_range=(0.5, 1.575),
+            stone_distance_range=(0.06, 0.1),
+            stone_height_max=0.18,
+            holes_depth=-1.5,
+            platform_width=2.0,
+            border_width=0.25,
+        ),
+        # rails 0.05
+        "rails": terrain_gen.MeshRailsTerrainCfg(
+            proportion=0.05,
+            rail_thickness_range=(0.05, 0.1),
+            rail_height_range=(0.2, 0.05),
+            platform_width=2.0,
+        ),
+        # repeat_objects 0.15
+        "repeat_objects_1": terrain_gen.MeshRepeatedBoxesTerrainCfg(
+            proportion=0.1,
+            max_height_noise=0.08,
+            object_params_start=mesh_gen.MeshRepeatedBoxesTerrainCfg.ObjectCfg(
+                num_objects=80, height=0.1, size=(0.1, 0.1), max_yx_angle=45.0, degrees=True
+            ),
+            object_params_end=mesh_gen.MeshRepeatedBoxesTerrainCfg.ObjectCfg(
+                num_objects=80, height=0.1, size=(0.3, 0.3), max_yx_angle=180.0, degrees=True
+            ),
+            platform_width=2.0,
+        ),
+        "repeat_objects_2": terrain_gen.MeshRepeatedBoxesTerrainCfg(
+            proportion=0.05,
+            max_height_noise=0.08,
+            object_params_start=mesh_gen.MeshRepeatedBoxesTerrainCfg.ObjectCfg(
+                num_objects=40, height=0.1, size=(0.07, 0.5), max_yx_angle=0, degrees=True
+            ),
+            object_params_end=mesh_gen.MeshRepeatedBoxesTerrainCfg.ObjectCfg(
+                num_objects=80, height=0.2, size=(0.07, 0.8), max_yx_angle=30, degrees=True
+            ),
+            platform_width=2.0,
+        ),
+        # "gaps": terrain_gen.MeshGapTerrainCfg(
+        #     proportion=0.10,
+        #     gap_width_range=(0.08, 0.15),
+        #     platform_width=2.0,
+        # ),
+        # "star": terrain_gen.MeshStarTerrainCfg(
+        #     proportion=0.10,
+        #     num_bars=6,
+        #     bar_width_range=(0.2, 0.5),
+        #     bar_height_range=(0.5, 0.8),
+        #     platform_width=2.0,
+        # ),
     },
     
     curriculum=True,                    # 启用课程学习 / Enable curriculum learning
@@ -102,23 +204,23 @@ BLIND_ROUGH_TERRAINS_PLAY_CFG = TerrainGeneratorCfg(
 )
 
 
-##################################
-# 困难粗糙地形配置 / Hard Rough Terrain Configuration
-##################################
+# ##################################
+# # 困难粗糙地形配置 / Hard Rough Terrain Configuration
+# ##################################
 
-BLIND_HARD_ROUGH_TERRAINS_CFG = BLIND_ROUGH_TERRAINS_CFG.copy()
-BLIND_HARD_ROUGH_TERRAINS_CFG.sub_terrains["waves"].num_waves = 8
-BLIND_HARD_ROUGH_TERRAINS_CFG.sub_terrains["waves"].amplitude_range = (0.02, 0.10)
-BLIND_HARD_ROUGH_TERRAINS_CFG.sub_terrains["boxes"].grid_height_range = (0.02, 0.08)
-BLIND_HARD_ROUGH_TERRAINS_CFG.sub_terrains["random_rough"].noise_range = (0.02, 0.10)
-BLIND_HARD_ROUGH_TERRAINS_CFG.sub_terrains["random_rough"].noise_step = 0.02
+# BLIND_HARD_ROUGH_TERRAINS_CFG = BLIND_ROUGH_TERRAINS_CFG.copy()
+# BLIND_HARD_ROUGH_TERRAINS_CFG.sub_terrains["waves"].num_waves = 8
+# BLIND_HARD_ROUGH_TERRAINS_CFG.sub_terrains["waves"].amplitude_range = (0.02, 0.10)
+# BLIND_HARD_ROUGH_TERRAINS_CFG.sub_terrains["boxes"].grid_height_range = (0.02, 0.08)
+# BLIND_HARD_ROUGH_TERRAINS_CFG.sub_terrains["random_rough"].noise_range = (0.02, 0.10)
+# BLIND_HARD_ROUGH_TERRAINS_CFG.sub_terrains["random_rough"].noise_step = 0.02
 
-BLIND_HARD_ROUGH_TERRAINS_PLAY_CFG = BLIND_ROUGH_TERRAINS_PLAY_CFG.copy()
-BLIND_HARD_ROUGH_TERRAINS_PLAY_CFG.sub_terrains["waves"].num_waves = 8
-BLIND_HARD_ROUGH_TERRAINS_PLAY_CFG.sub_terrains["waves"].amplitude_range = (0.02, 0.10)
-BLIND_HARD_ROUGH_TERRAINS_PLAY_CFG.sub_terrains["boxes"].grid_height_range = (0.02, 0.08)
-BLIND_HARD_ROUGH_TERRAINS_PLAY_CFG.sub_terrains["random_rough"].noise_range = (0.02, 0.10)
-BLIND_HARD_ROUGH_TERRAINS_PLAY_CFG.sub_terrains["random_rough"].noise_step = 0.02
+# BLIND_HARD_ROUGH_TERRAINS_PLAY_CFG = BLIND_ROUGH_TERRAINS_PLAY_CFG.copy()
+# BLIND_HARD_ROUGH_TERRAINS_PLAY_CFG.sub_terrains["waves"].num_waves = 8
+# BLIND_HARD_ROUGH_TERRAINS_PLAY_CFG.sub_terrains["waves"].amplitude_range = (0.02, 0.10)
+# BLIND_HARD_ROUGH_TERRAINS_PLAY_CFG.sub_terrains["boxes"].grid_height_range = (0.02, 0.08)
+# BLIND_HARD_ROUGH_TERRAINS_PLAY_CFG.sub_terrains["random_rough"].noise_range = (0.02, 0.10)
+# BLIND_HARD_ROUGH_TERRAINS_PLAY_CFG.sub_terrains["random_rough"].noise_step = 0.02
 
 ##############################
 # 楼梯地形配置 / Stairs Terrain Configuration

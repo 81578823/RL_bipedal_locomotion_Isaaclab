@@ -11,7 +11,7 @@
             "console": "integratedTerminal",  // 改为集成终端
             "justMyCode": false,
             "args": [
-                "--task", "Isaac-Limx-PF-Blind-Flat-v0",
+                "--task", "Isaac-Limx-PF-Blind-Rough-v0",
                 // "--num_envs", "16", 
                 "--headless"
             ]

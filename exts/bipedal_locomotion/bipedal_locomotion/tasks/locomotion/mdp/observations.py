@@ -42,6 +42,189 @@ def robot_mass(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg(
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     return asset.data.default_mass.to(device)
 
+class BaseCOMWrapper:
+    def __init__(self):
+        self.count = 0
+        self.coms = None
+        self.body_ids = None
+        self.__name__ = "base_com"
+
+    def __call__(self, env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+        """Returns the center of mass positions of the specified bodies in the asset.
+
+        Args:
+            env: The environment instance
+            asset_cfg: The asset configuration containing body IDs to track
+
+        Returns:
+            torch.Tensor: Center of mass positions in world frame
+        """
+        # extract the used quantities (to enable type-hinting)
+        asset: RigidObject | Articulation = env.scene[asset_cfg.name]
+
+        if self.count <= 1:
+            # Initialize body IDs on first call
+            if asset_cfg.body_ids == slice(None):
+                self.body_ids = torch.arange(asset.num_bodies, dtype=torch.int, device="cpu")
+            else:
+                self.body_ids = torch.tensor(asset_cfg.body_ids, dtype=torch.int, device="cpu")
+
+            # Get initial COM positions
+            self.coms = asset.root_physx_view.get_coms()[:, self.body_ids, :3].to(env.device).squeeze(1)
+
+        # Update COMs for first few steps to ensure stability
+        if self.count < 5:
+            self.coms = asset.root_physx_view.get_coms()[:, self.body_ids, :3].to(env.device).squeeze(1)
+
+        self.count += 1
+        if self.coms is None:
+            self.coms = asset.root_physx_view.get_coms()[:, self.body_ids, :3].to(env.device).squeeze(1)
+
+        return self.coms
+
+
+base_com = BaseCOMWrapper()
+
+class BodyMassWrapper:
+    def __init__(self):
+        self.count = 0
+        self.masses = None
+        self.__name__ = "body_mass"
+
+    def __call__(self, env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+        """The mass of the body of the asset."""
+        # extract the used quantities (to enable type-hinting)
+        asset: RigidObject | Articulation = env.scene[asset_cfg.name]
+
+        if self.count <= 1:
+            self.masses = asset.root_physx_view.get_masses().to(device=asset.device)
+
+        self.count += 1
+        # Return the mass of the base for all environments
+        return self.masses[:, asset_cfg.body_ids]
+
+
+body_mass = BodyMassWrapper()
+
+
+class BodyMassRelWrapper:
+    def __init__(self):
+        self.count = 0
+        self.masses = None
+        self.default_masses = None
+        self.__name__ = "body_mass_rel"
+
+    def __call__(self, env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+        """The mass of the body of the asset."""
+        # extract the used quantities (to enable type-hinting)
+        asset: RigidObject | Articulation = env.scene[asset_cfg.name]
+
+        if self.count <= 1:
+            self.masses = asset.root_physx_view.get_masses().to(device=asset.device)
+            self.default_masses = asset.data.default_mass.to(device=asset.device)
+
+        self.count += 1
+        # Return the mass of the base for all environments
+        return self.masses[:, asset_cfg.body_ids] - self.default_masses[:, asset_cfg.body_ids]
+
+
+body_mass_rel = BodyMassRelWrapper()
+
+class RigidBodyMaterialsWrapper:
+    def __init__(self):
+        self.count = 0
+        self.materials = None
+        self.__name__ = "rigid_body_materials"
+
+    def __call__(self, env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+        """The mass of the body of the asset."""
+        # extract the used quantities (to enable type-hinting)
+        asset: RigidObject | Articulation = env.scene[asset_cfg.name]
+
+        if self.count <= 1:
+            self.materials = asset.root_physx_view.get_material_properties().to(device=asset.device)
+            self.num_shapes_per_body = []
+            for link_path in asset.root_physx_view.link_paths[0]:
+                link_physx_view = asset._physics_sim_view.create_rigid_body_view(link_path)  # type: ignore
+                self.num_shapes_per_body.append(link_physx_view.max_shapes)
+
+            # sample material properties from the given ranges
+            body_count = 0
+            self.body_ids = []
+            for body_ids, valid in enumerate(self.num_shapes_per_body):
+                if valid:
+                    if isinstance(asset_cfg.body_ids, slice):
+                        asset_cfg.body_ids = list(range(len(asset_cfg.body_ids)))
+                    if body_ids in asset_cfg.body_ids:
+                        self.body_ids.append(body_count)
+                    body_count += 1
+
+        self.count += 1
+
+        return self.materials[:, self.body_ids, :].flatten(start_dim=1)
+
+
+rigid_body_materials = RigidBodyMaterialsWrapper()
+
+def foot_clearance_flag(
+    env: ManagerBasedRLEnv,
+    sensor_cfg: SceneEntityCfg,
+    contact_sensor_cfg: SceneEntityCfg = None,
+    foot_radius: float = 0.032,
+    contact_threshold: float = 1.0,
+    clearance_threshold: float = 0.05,
+) -> torch.Tensor:
+    """Get a binary flag indicating if a foot has clearance issues.
+
+    This function checks if there are significant height differences in the scanned area
+    around the foot when it's in contact with the ground.
+
+    Args:
+        env: The RL environment instance
+        sensor_cfg: Configuration for the foot's height scanner
+        contact_sensor_cfg: Configuration for contact sensor (optional)
+        foot_radius: Radius of the robot's foot
+        contact_threshold: Threshold to determine if foot is in contact
+        clearance_threshold: Threshold to determine if there's a clearance issue
+
+    Returns:
+        torch.Tensor: Binary flag (0.0 or 1.0) for each environment. Shape: (num_envs, 1)
+    """
+    # Get the height scanner data
+    scanner = env.scene.sensors[sensor_cfg.name]
+    heights = scanner.data.ray_hits_w[..., 2]  # Shape: [num_envs, num_rays]
+
+    # Handle invalid height readings (inf)
+    heights = torch.nan_to_num(heights, nan=-0.1, posinf=-0.1, neginf=-0.1)
+
+    # Get foot height from scanner position
+    foot_height = scanner.data.pos_w[:, 2].unsqueeze(1) - foot_radius
+
+    # Calculate height differences
+    height_diffs = torch.abs(foot_height - heights)
+
+    # Clip small height differences to zero
+    height_diffs = torch.clamp_min(height_diffs - 0.01, min=0)
+
+    # Check if foot is in contact (if contact sensor is provided)
+    if contact_sensor_cfg is not None:
+        contact_sensor = env.scene.sensors[contact_sensor_cfg.name]
+        # Get foot index from body_ids
+        foot_idx = 0  # Adjust based on actual foot index in body_ids
+        if sensor_cfg.name == "right_foot_height_scanner":
+            foot_idx = 1  # Assuming right foot is second in body_ids
+
+        contact_forces = contact_sensor.data.net_forces_w[:, contact_sensor_cfg.body_ids]
+        foot_contact = torch.norm(contact_forces[:, foot_idx], dim=-1) > contact_threshold
+
+        # Only check for clearance when foot is in contact
+        height_diffs = torch.where(foot_contact.unsqueeze(-1), height_diffs, torch.zeros_like(height_diffs))
+
+    # Sum the height differences
+    sum_height_diffs = torch.sum(height_diffs, dim=-1, keepdim=True)
+
+    # Return binary flag (1.0 if sum exceeds threshold, 0.0 otherwise)
+    return (sum_height_diffs > clearance_threshold).float()
 
 def robot_inertia(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """inertia of the robot"""
