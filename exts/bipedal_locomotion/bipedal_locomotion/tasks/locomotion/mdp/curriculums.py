@@ -92,8 +92,18 @@ def progressive_command_ranges(
     if stage_to_apply is None:
         return torch.zeros(1)
 
-    # fetch and mutate command term config
-    term_cfg = env.command_manager.get_term_cfg(command_name)
+    # fetch and mutate command term config (support IsaacLab versions without get_term_cfg)
+    command_manager = env.command_manager
+    term_cfg_getter = getattr(command_manager, "get_term_cfg", None)
+    term_cfg_setter = getattr(command_manager, "set_term_cfg", None)
+    command_term = None
+
+    if callable(term_cfg_getter):
+        term_cfg = term_cfg_getter(command_name)
+    else:
+        command_term = command_manager.get_term(command_name)
+        term_cfg = command_term.cfg
+
     ranges = term_cfg.ranges
     if "lin_vel_x" in stage_to_apply:
         ranges.lin_vel_x = tuple(stage_to_apply["lin_vel_x"])
@@ -104,5 +114,8 @@ def progressive_command_ranges(
     if "heading" in stage_to_apply:
         ranges.heading = tuple(stage_to_apply["heading"])
     term_cfg.ranges = ranges
-    env.command_manager.set_term_cfg(command_name, term_cfg)
+    if callable(term_cfg_setter):
+        term_cfg_setter(command_name, term_cfg)
+    elif command_term is not None:
+        command_term.cfg = term_cfg
     return torch.ones(1)
