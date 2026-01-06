@@ -104,6 +104,78 @@ def unbalance_feet_height(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg) ->
     return height_variance
 
 
+def feet_air_time_reward(
+    env: ManagerBasedRLEnv,
+    sensor_cfg: SceneEntityCfg,
+    min_feet_air_time: float,
+    max_feet_air_time: float,
+) -> torch.Tensor:
+    """Reward feet that stay in the air within a desired window."""
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    if not hasattr(contact_sensor.data, "last_air_time"):
+        return torch.zeros(env.num_envs, device=env.device)
+    air_time = contact_sensor.data.last_air_time[:, sensor_cfg.body_ids]
+    below_max = torch.clip(air_time - min_feet_air_time, min=0.0)
+    above_max = torch.clip(air_time - max_feet_air_time, min=0.0)
+    return torch.sum(below_max - above_max, dim=1)
+
+
+def feet_air_time_sync(
+    env: ManagerBasedRLEnv,
+    sensor_cfg: SceneEntityCfg,
+    sync_scale: float = 0.05,
+) -> torch.Tensor:
+    """Encourage left-right air time symmetry."""
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    if not hasattr(contact_sensor.data, "last_air_time"):
+        return torch.zeros(env.num_envs, device=env.device)
+    air_time = contact_sensor.data.last_air_time[:, sensor_cfg.body_ids]
+    if air_time.shape[1] < 2:
+        return torch.zeros(env.num_envs, device=env.device)
+    diff = torch.abs(air_time[:, 0] - air_time[:, 1])
+    return torch.exp(-diff / sync_scale)
+
+
+def max_feet_height_sync(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg,
+    left_scanner_cfg: SceneEntityCfg,
+    right_scanner_cfg: SceneEntityCfg,
+    height_sigma: float = 0.05,
+) -> torch.Tensor:
+    """Encourage similar swing height between left and right feet."""
+    asset: RigidObject | Articulation = env.scene[asset_cfg.name]
+    # Resolve foot indices
+    foot_indices = asset_cfg.body_ids
+    if foot_indices is None or len(foot_indices) == 0:
+        body_names = asset_cfg.body_names
+    if isinstance(body_names, str):
+        body_names = [body_names]
+    foot_indices = asset.find_bodies(body_names)[0]
+
+    feet_pos = asset.data.body_link_pos_w[:, foot_indices, 2]
+    if feet_pos.shape[1] < 2:
+        return torch.zeros(env.num_envs, device=env.device)
+
+    left_scanner: RayCaster = env.scene.sensors[left_scanner_cfg.name]
+    right_scanner: RayCaster = env.scene.sensors[right_scanner_cfg.name]
+
+    if not hasattr(left_scanner.data, "ray_hits_w") or not hasattr(right_scanner.data, "ray_hits_w"):
+        return torch.zeros(env.num_envs, device=env.device)
+
+    left_hits = torch.nan_to_num(left_scanner.data.ray_hits_w[:, :, 2], nan=0.0, posinf=0.0, neginf=0.0)
+    right_hits = torch.nan_to_num(right_scanner.data.ray_hits_w[:, :, 2], nan=0.0, posinf=0.0, neginf=0.0)
+
+    left_ground = torch.min(left_hits, dim=1).values
+    right_ground = torch.min(right_hits, dim=1).values
+
+    # Assume index 0 -> left, 1 -> right
+    left_height = feet_pos[:, 0] - left_ground
+    right_height = feet_pos[:, 1] - right_ground
+    height_diff = torch.abs(left_height - right_height)
+    return torch.exp(-height_diff / height_sigma)
+
+
 def feet_distance(env: ManagerBasedRLEnv,
                   asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
                   feet_links_name: list[str]=["foot_[RL]_Link"],
