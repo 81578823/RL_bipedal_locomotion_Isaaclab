@@ -67,3 +67,42 @@ def disable_termination(
         env.termination_manager.set_term_cfg(term_name, term_cfg)
         return torch.ones(1)
     return torch.zeros(1)
+
+
+def progressive_command_ranges(
+    env: ManagerBasedRLEnv,
+    env_ids: Sequence[int],
+    command_name: str,
+    stages: list[dict],
+) -> torch.Tensor:
+    """Curriculum to gradually expand velocity command ranges.
+
+    Args:
+        env: The learning environment.
+        env_ids: Not used since all environments are affected.
+        command_name: Name of the command term (e.g., ``\"base_velocity\"``).
+        stages: List of dicts with keys ``step`` and any of ``lin_vel_x``, ``lin_vel_y``, ``ang_vel_z``, ``heading``.
+                The highest stage with ``step <= common_step_counter`` is applied.
+    """
+    # pick the stage that matches the current step
+    stage_to_apply = None
+    for stage in stages:
+        if env.common_step_counter >= stage.get("step", 0):
+            stage_to_apply = stage
+    if stage_to_apply is None:
+        return torch.zeros(1)
+
+    # fetch and mutate command term config
+    term_cfg = env.command_manager.get_term_cfg(command_name)
+    ranges = term_cfg.ranges
+    if "lin_vel_x" in stage_to_apply:
+        ranges.lin_vel_x = tuple(stage_to_apply["lin_vel_x"])
+    if "lin_vel_y" in stage_to_apply:
+        ranges.lin_vel_y = tuple(stage_to_apply["lin_vel_y"])
+    if "ang_vel_z" in stage_to_apply:
+        ranges.ang_vel_z = tuple(stage_to_apply["ang_vel_z"])
+    if "heading" in stage_to_apply:
+        ranges.heading = tuple(stage_to_apply["heading"])
+    term_cfg.ranges = ranges
+    env.command_manager.set_term_cfg(command_name, term_cfg)
+    return torch.ones(1)

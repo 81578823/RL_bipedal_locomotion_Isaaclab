@@ -636,6 +636,18 @@ class CurriculumCfg:
 
     # 地形难度课程 / Terrain difficulty curriculum
     terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
+    # 命令课程 / Command curriculum - gradually widen command ranges
+    command_ranges = CurrTerm(
+        func=mdp.progressive_command_ranges,
+        params={
+            "command_name": "base_velocity",
+            "stages": [
+                {"step": 0, "lin_vel_x": (-0.3, 0.3), "lin_vel_y": (-0.2, 0.2), "ang_vel_z": (-0.3, 0.3), "heading": (-math.pi, math.pi)},
+                {"step": 5000, "lin_vel_x": (-0.8, 0.8), "lin_vel_y": (-0.5, 0.5), "ang_vel_z": (-0.5, 0.5), "heading": (-math.pi, math.pi)},
+                {"step": 15000, "lin_vel_x": (-1.5, 1.5), "lin_vel_y": (-1.0, 1.0), "ang_vel_z": (-0.5, 0.5), "heading": (-math.pi, math.pi)},
+            ],
+        },
+    )
 
 
 ########################
