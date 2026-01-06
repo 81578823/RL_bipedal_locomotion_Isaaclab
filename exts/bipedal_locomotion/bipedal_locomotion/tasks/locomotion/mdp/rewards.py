@@ -149,9 +149,14 @@ def max_feet_height_sync(
     foot_indices = asset_cfg.body_ids
     if foot_indices is None or len(foot_indices) == 0:
         body_names = asset_cfg.body_names
-    if isinstance(body_names, str):
-        body_names = [body_names]
-    foot_indices = asset.find_bodies(body_names)[0]
+        if body_names is None:
+            return torch.zeros(env.num_envs, device=env.device)
+        if isinstance(body_names, str):
+            body_names = [body_names]
+        foot_indices = asset.find_bodies(body_names)[0]
+
+    if foot_indices is None or len(foot_indices) < 2:
+        return torch.zeros(env.num_envs, device=env.device)
 
     feet_pos = asset.data.body_link_pos_w[:, foot_indices, 2]
     if feet_pos.shape[1] < 2:
