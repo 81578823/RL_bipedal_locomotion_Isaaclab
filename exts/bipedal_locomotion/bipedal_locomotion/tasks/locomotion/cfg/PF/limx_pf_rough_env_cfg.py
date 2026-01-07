@@ -471,10 +471,10 @@ class RewardsCfg:
 
     # tracking related rewards
     rew_lin_vel_xy = RewTerm(
-        func=mdp.track_lin_vel_xy_exp, weight=1.5, params={"command_name": "base_velocity", "std": math.sqrt(0.2)}
+        func=mdp.track_lin_vel_xy_exp, weight=3, params={"command_name": "base_velocity", "std": math.sqrt(0.2)}
     )
     rew_ang_vel_z = RewTerm(
-        func=mdp.track_ang_vel_z_exp, weight=0.8, params={"command_name": "base_velocity", "std": math.sqrt(0.2)}
+        func=mdp.track_ang_vel_z_exp, weight=1.5, params={"command_name": "base_velocity", "std": math.sqrt(0.2)}
     )
 
     # # 调节相关奖励 / Regulation-related rewards
@@ -486,7 +486,7 @@ class RewardsCfg:
 
     pen_base_height_l2 = RewTerm(
         func=mdp.base_height_rough_l2,
-        weight=-5.0, #-10
+        weight=-10.0, 
         params={"target_height": 0.76, "sensor_cfg": SceneEntityCfg("height_scanner")},
     )  # Overwrite flat default target height
     
@@ -521,11 +521,11 @@ class RewardsCfg:
     )
     pen_flat_orientation = RewTerm(
         func=mdp.flat_orientation_l2,               # 平坦朝向L2惩罚 / Flat orientation L2 penalty
-        weight=-5.0 #-10
+        weight=-10
     )
     pen_feet_distance = RewTerm(
         func=mdp.feet_distance,                     # 足部距离惩罚 / Foot distance penalty
-        weight=-20, #-100
+        weight=-100,
         params={
             "min_feet_distance": 0.115,            # 最小足部距离 / Minimum foot distance
             "feet_links_name": ["foot_[RL]_Link"]  # 足部连杆名称 / Foot link names
