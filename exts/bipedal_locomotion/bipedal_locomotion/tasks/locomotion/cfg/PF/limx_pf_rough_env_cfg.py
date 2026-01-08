@@ -630,6 +630,13 @@ class TerminationsCfg:
         }
     )
 
+@configclass
+class CurriculumCfg:
+    """课程学习配置类 / Curriculum learning configuration class"""
+
+    # 地形难度课程 / Terrain difficulty curriculum
+    terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
+    
 ########################
 # 环境定义 / Environment Definition
 ########################
