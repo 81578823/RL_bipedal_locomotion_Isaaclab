@@ -52,6 +52,7 @@ import bipedal_locomotion  # noqa: F401
 from bipedal_locomotion.utils.wrappers.rsl_rl import RslRlPpoAlgorithmMlpCfg, export_mlp_as_onnx, export_policy_as_jit
 # 输入设备，用于键盘/手柄读取 / Input interface for keyboard/gamepad polling
 import carb
+import omni.appwindow
 
 
 def main():
@@ -105,7 +106,25 @@ def main():
 
     # === 手柄输入准备 / Prepare gamepad input ===
     input_iface = carb.input.acquire_input_interface()
-    keyboard = input_iface.get_keyboard() if hasattr(input_iface, "get_keyboard") else None
+    app_window = omni.appwindow.get_default_app_window()
+    keyboard = app_window.get_keyboard() if app_window is not None else None
+    # 订阅键盘事件，维护按键状态 / Subscribe to keyboard events to track key states
+    pressed_keys = set()
+    keyboard_sub_id = None
+
+    def on_keyboard_event(e):
+        from carb.input import KeyboardEventType
+
+        # 仅记录我们关心的按下/释放事件 / Track press/release events
+        if e.type in (KeyboardEventType.KEY_PRESS, KeyboardEventType.KEY_REPEAT):
+            pressed_keys.add(e.input)
+        elif e.type == KeyboardEventType.KEY_RELEASE:
+            pressed_keys.discard(e.input)
+        return True
+
+    if keyboard is not None and hasattr(input_iface, "subscribe_to_keyboard_events"):
+        keyboard_sub_id = input_iface.subscribe_to_keyboard_events(keyboard, on_keyboard_event)
+
     # 兼容不同版本 carb.input 接口：优先 get_gamepad(idx)，否则用 get_gamepad_guid(idx)
     gamepad_handle = None
     if hasattr(input_iface, "get_gamepad"):
@@ -130,14 +149,11 @@ def main():
         - A/D: 左/右平移
         - Q/E: 左/右旋转（偏航角速度）
         """
-        if keyboard is None:
+        if keyboard is None or keyboard_sub_id is None:
             return cmd_tensor
 
         def pressed(key_code):
-            try:
-                return keyboard.is_key_down(key_code)
-            except Exception:
-                return False
+            return key_code in pressed_keys
 
         vx = 0.0
         vy = 0.0
@@ -157,10 +173,14 @@ def main():
         if pressed(carb.input.KeyboardInput.E):
             wz += ang_scale
 
+        # 兼容命令维度：常见 (N,3)=[vx,vy,wz] 或 (N,4)=[vx,vy,wz,heading]
         cmd_tensor[:, 0] = vx
-        cmd_tensor[:, 1] = vy
-        cmd_tensor[:, 2] = wz
-        cmd_tensor[:, 3] = 0.0  # heading 保持 0
+        if cmd_tensor.shape[1] > 1:
+            cmd_tensor[:, 1] = vy
+        if cmd_tensor.shape[1] > 2:
+            cmd_tensor[:, 2] = wz
+        if cmd_tensor.shape[1] > 3:
+            cmd_tensor[:, 3] = 0.0  # heading 保持 0
         return cmd_tensor
 
     def apply_gamepad_commands(cmd_tensor, lin_scale=1.2, ang_scale=0.8):
@@ -203,10 +223,13 @@ def main():
         vy = _axis(state, ("left_stick_x", "leftStickX", "left_x", "leftX", "lx")) * lin_scale
         wz = _axis(state, ("right_stick_x", "rightStickX", "right_x", "rightX", "rx")) * ang_scale
         cmd_tensor[:, 0] = vx
-        cmd_tensor[:, 1] = vy
-        cmd_tensor[:, 2] = wz
+        if cmd_tensor.shape[1] > 1:
+            cmd_tensor[:, 1] = vy
+        if cmd_tensor.shape[1] > 2:
+            cmd_tensor[:, 2] = wz
         # heading 保持 0，交给策略自行选择航向 / Keep heading zero; policy handles heading
-        cmd_tensor[:, 3] = 0.0
+        if cmd_tensor.shape[1] > 3:
+            cmd_tensor[:, 3] = 0.0
         return cmd_tensor
 
      # 导出策略到onnx / Export policy to onnx
