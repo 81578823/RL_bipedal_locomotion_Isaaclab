@@ -201,8 +201,8 @@ class PFBlindStairEnvCfg(PFBaseEnvCfg):
         self.commands.base_velocity.ranges.ang_vel_z = (-math.pi / 6, math.pi / 6)  # 转向：±30度 / Turning: ±30 degrees
 
         # 调整奖励权重以适应楼梯爬升 / Adjust reward weights for stair climbing
-        self.rewards.rew_lin_vel_xy.weight = 2.0          # 增加线速度跟踪奖励 / Increase linear velocity tracking reward
-        self.rewards.rew_ang_vel_z.weight = 1.5           # 增加角速度跟踪奖励 / Increase angular velocity tracking reward
+        self.rewards.rew_lin_vel_xy.weight = 4.0      #2.0    # 增加线速度跟踪奖励 / Increase linear velocity tracking reward
+        self.rewards.rew_ang_vel_z.weight = 3        #1.5   # 增加角速度跟踪奖励 / Increase angular velocity tracking reward
         self.rewards.pen_lin_vel_z.weight = -1.0          # 增加Z方向速度惩罚 / Increase Z velocity penalty
         self.rewards.pen_ang_vel_xy.weight = -0.05        # XY角速度惩罚 / XY angular velocity penalty
         self.rewards.pen_action_rate.weight = -0.01       # 动作变化率惩罚 / Action rate penalty
