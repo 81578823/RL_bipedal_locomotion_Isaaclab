@@ -50,6 +50,8 @@ from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
 # Import extensions to set up environment tasks
 import bipedal_locomotion  # noqa: F401
 from bipedal_locomotion.utils.wrappers.rsl_rl import RslRlPpoAlgorithmMlpCfg, export_mlp_as_onnx, export_policy_as_jit
+# 输入设备，用于键盘/手柄读取 / Input interface for keyboard/gamepad polling
+import carb
 
 
 def main():
@@ -101,6 +103,112 @@ def main():
     policy = ppo_runner.get_inference_policy(device=env.unwrapped.device)
     encoder = ppo_runner.get_inference_encoder(device=env.unwrapped.device)
 
+    # === 手柄输入准备 / Prepare gamepad input ===
+    input_iface = carb.input.acquire_input_interface()
+    keyboard = input_iface.get_keyboard() if hasattr(input_iface, "get_keyboard") else None
+    # 兼容不同版本 carb.input 接口：优先 get_gamepad(idx)，否则用 get_gamepad_guid(idx)
+    gamepad_handle = None
+    if hasattr(input_iface, "get_gamepad"):
+        try:
+            gamepad_handle = input_iface.get_gamepad(0)
+        except TypeError:
+            # 某些版本 get_gamepad 不接受参数；直接调用
+            try:
+                gamepad_handle = input_iface.get_gamepad()
+            except Exception:
+                gamepad_handle = None
+    if gamepad_handle is None and hasattr(input_iface, "get_gamepad_guid"):
+        try:
+            gamepad_handle = input_iface.get_gamepad_guid(0)
+        except Exception:
+            gamepad_handle = None
+
+    def apply_keyboard_commands(cmd_tensor, lin_scale=1.0, ang_scale=0.8):
+        """
+        读取键盘按键并覆盖 base_velocity 命令。
+        - W/S: 前进/后退
+        - A/D: 左/右平移
+        - Q/E: 左/右旋转（偏航角速度）
+        """
+        if keyboard is None:
+            return cmd_tensor
+
+        def pressed(key_code):
+            try:
+                return keyboard.is_key_down(key_code)
+            except Exception:
+                return False
+
+        vx = 0.0
+        vy = 0.0
+        wz = 0.0
+        # 线速度：W 前、S 后；A 左（负）、D 右（正）
+        if pressed(carb.input.KeyboardInput.W):
+            vx += lin_scale
+        if pressed(carb.input.KeyboardInput.S):
+            vx -= lin_scale
+        if pressed(carb.input.KeyboardInput.A):
+            vy -= lin_scale
+        if pressed(carb.input.KeyboardInput.D):
+            vy += lin_scale
+        # 角速度：Q 左转（负），E 右转（正）
+        if pressed(carb.input.KeyboardInput.Q):
+            wz -= ang_scale
+        if pressed(carb.input.KeyboardInput.E):
+            wz += ang_scale
+
+        cmd_tensor[:, 0] = vx
+        cmd_tensor[:, 1] = vy
+        cmd_tensor[:, 2] = wz
+        cmd_tensor[:, 3] = 0.0  # heading 保持 0
+        return cmd_tensor
+
+    def apply_gamepad_commands(cmd_tensor, lin_scale=1.2, ang_scale=0.8):
+        """
+        从手柄读取输入并覆盖 base_velocity 命令。
+        - 左摇杆 Y：前后速度（前正，取反是因为上推为负值）
+        - 左摇杆 X：侧向速度（右正）
+        - 右摇杆 X：偏航角速度（右正）
+        """
+        if gamepad_handle is None:
+            return cmd_tensor
+
+        # 获取手柄状态：新接口为 input_iface.get_gamepad_state(handle)，旧接口可能是 handle.get_state()
+        state = None
+        if hasattr(input_iface, "get_gamepad_state"):
+            try:
+                state = input_iface.get_gamepad_state(gamepad_handle)
+            except Exception:
+                state = None
+        if state is None and hasattr(gamepad_handle, "get_state"):
+            try:
+                state = gamepad_handle.get_state()
+            except Exception:
+                state = None
+        if state is None:
+            return cmd_tensor
+
+        def _axis(obj, names):
+            """从状态对象中按候选名称取出轴值，不存在则返回0。"""
+            for n in names:
+                if hasattr(obj, n):
+                    try:
+                        return float(getattr(obj, n))
+                    except Exception:
+                        continue
+            return 0.0
+
+        # 手柄轴通常在 [-1, 1]，根据需要缩放到期望速度范围 / Scale raw axes to desired command ranges
+        vx = -_axis(state, ("left_stick_y", "leftStickY", "left_y", "leftY", "ly")) * lin_scale
+        vy = _axis(state, ("left_stick_x", "leftStickX", "left_x", "leftX", "lx")) * lin_scale
+        wz = _axis(state, ("right_stick_x", "rightStickX", "right_x", "rightX", "rx")) * ang_scale
+        cmd_tensor[:, 0] = vx
+        cmd_tensor[:, 1] = vy
+        cmd_tensor[:, 2] = wz
+        # heading 保持 0，交给策略自行选择航向 / Keep heading zero; policy handles heading
+        cmd_tensor[:, 3] = 0.0
+        return cmd_tensor
+
      # 导出策略到onnx / Export policy to onnx
     if EXPORT_POLICY:
         export_model_dir = os.path.join(os.path.dirname(resume_path), "exported")
@@ -129,6 +237,26 @@ def main():
     while simulation_app.is_running():
         # run everything in inference mode
         with torch.inference_mode():
+            # 读取手柄并更新命令：直接写入 env 的 base_velocity 命令缓冲 / Poll gamepad to drive base_velocity
+            if "commands" in obs_dict["observations"]:
+                # 优先直接修改 command_term 的 buffer，避免缺少 set_command 接口 / mutate term buffer directly
+                cmd_term = None
+                if hasattr(env.unwrapped, "command_manager"):
+                    try:
+                        cmd_term = env.unwrapped.command_manager.get_term("base_velocity")
+                    except Exception:
+                        cmd_term = None
+                # commands 张量形状 (num_envs, 4): [lin_x, lin_y, ang_z, heading]
+                if cmd_term is not None and hasattr(cmd_term, "command"):
+                    # 先键盘、后手柄：键盘存在则覆盖，否则尝试手柄 / keyboard first, then gamepad
+                    cmd_term.command[:] = apply_keyboard_commands(cmd_term.command)
+                    cmd_term.command[:] = apply_gamepad_commands(cmd_term.command)
+                    commands = cmd_term.command
+                else:
+                    # 回退仅供策略输入使用，不会影响环境内部命令 / fallback only affects policy input
+                    commands = apply_keyboard_commands(commands)
+                    commands = apply_gamepad_commands(commands)
+
             # agent stepping
             est = encoder(obs_history)
             actions = policy(torch.cat((est, obs, commands), dim=-1).detach())
@@ -137,6 +265,7 @@ def main():
             obs_history = infos["observations"].get("obsHistory")
             obs_history = obs_history.flatten(start_dim=1)
             commands = infos["observations"].get("commands") 
+            obs_dict = infos  # 下一帧继续使用最新观测 / keep newest obs_dict for next loop
 
     # close the simulator
     env.close()
