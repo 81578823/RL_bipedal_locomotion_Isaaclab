@@ -115,6 +115,31 @@ class PFRoughBaseEnvCfg_PLAY(PFRoughBaseEnvCfg):
         self.events.add_base_mass = None
 
 
+@configclass
+class PFRoughBaseEnvCfg_PLAY_NEAR(PFRoughBaseEnvCfg_PLAY):
+    """测试环境：单个环境、紧凑地形并设置近处初始位姿 / Play env with 1 env, nearby terrain and spawn pose"""
+    def __post_init__(self):
+        super().__post_init__()
+
+        # 单环境便于测试定位 / single env for easy testing
+        self.scene.num_envs = 1
+        self.scene.env_spacing = 1.0
+
+        # 机器人初始根位姿（x, y, z, qw, qx, qy, qz）/ initial root pose
+        self.scene.robot.init_state.pos = (0.0, 0.0, 0.9)
+        self.scene.robot.init_state.rot = (1.0, 0.0, 0.0, 0.0)
+
+        # 缩减地形网格，地形更靠近原点 / shrink terrain grid to stay near origin
+        if self.scene.terrain is not None and self.scene.terrain.terrain_generator is not None:
+            self.scene.terrain.terrain_generator.num_rows = 2
+            self.scene.terrain.terrain_generator.num_cols = 2
+            self.scene.terrain.terrain_generator.border_width = 2.0
+
+        # 关闭课程，固定初始难度 / disable curriculum to avoid jumping to far tiles
+        self.curriculum.terrain_levels = None
+        self.scene.terrain.max_init_terrain_level = 0
+
+
 ############################
 # 双足机器人盲视平地环境 / Pointfoot Blind Flat Environment
 ############################

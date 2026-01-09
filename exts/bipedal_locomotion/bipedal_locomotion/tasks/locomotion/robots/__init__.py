@@ -67,6 +67,16 @@ gym.register(
     },
 )
 
+gym.register(
+    id="Isaac-Limx-PF-Blind-Rough-Play-Near-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": limx_pointfoot_env_cfg.PFRoughBaseEnvCfg_PLAY_NEAR,
+        "rsl_rl_cfg_entry_point": limx_pf_blind_rough_runner_cfg,
+    },
+)
+
 #############################
 # WF Blind Flat Environment
 #############################
