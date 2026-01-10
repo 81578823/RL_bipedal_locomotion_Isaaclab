@@ -40,6 +40,7 @@ simulation_app = app_launcher.app
 import gymnasium as gym
 import os
 import torch
+import numpy as np
 
 from rsl_rl.runner import OnPolicyRunner
 
@@ -256,8 +257,15 @@ def main():
     obs_history = obs_dict["observations"].get("obsHistory")
     obs_history = obs_history.flatten(start_dim=1)
     commands = obs_dict["observations"].get("commands") 
+    # 记录命令与实际速度（限制记录步数防止占用过多内存） / buffers for cmd vs actual velocity
+    log_cmd = []
+    log_vel = []
+    log_max = 800
     # simulate environment
-    while simulation_app.is_running():
+    maxstep=800
+    step = 0
+    while simulation_app.is_running() and step < maxstep:
+        step += 1
         # run everything in inference mode
         with torch.inference_mode():
             # 读取手柄并更新命令：直接写入 env 的 base_velocity 命令缓冲 / Poll gamepad to drive base_velocity
@@ -289,9 +297,47 @@ def main():
             obs_history = obs_history.flatten(start_dim=1)
             commands = infos["observations"].get("commands") 
             obs_dict = infos  # 下一帧继续使用最新观测 / keep newest obs_dict for next loop
+            # 记录当前命令与实际速度（取第一个 env）/ log commanded vs actual base velocity
+            if len(log_cmd) < log_max and isinstance(commands, torch.Tensor):
+                try:
+                    cmd_np = commands[0].detach().cpu().numpy()
+                    robot = env.unwrapped.scene["robot"]
+                    base_vel = robot.data.root_lin_vel_w[:, :2]
+                    vel_np = base_vel[0].detach().cpu().numpy()
+                    log_cmd.append(cmd_np[:2])
+                    log_vel.append(vel_np)
+                except Exception:
+                    pass
 
     # close the simulator
     env.close()
+
+    # 保存命令与实际速度曲线 / save plot of command vs velocity
+    if len(log_cmd) > 0:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        t = np.arange(len(log_cmd)) * env.unwrapped.step_dt
+        cmd_arr = np.vstack(log_cmd)
+        vel_arr = np.vstack(log_vel)
+
+        fig, axes = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
+        axes[0].plot(t, cmd_arr[:, 0], label="cmd vx")
+        axes[0].plot(t, vel_arr[:, 0], label="actual vx")
+        axes[0].set_ylabel("vx (m/s)")
+        axes[0].legend()
+
+        axes[1].plot(t, cmd_arr[:, 1], label="cmd vy")
+        axes[1].plot(t, vel_arr[:, 1], label="actual vy")
+        axes[1].set_ylabel("vy (m/s)")
+        axes[1].set_xlabel("time (s)")
+        axes[1].legend()
+
+        fig.tight_layout()
+        plot_path = os.path.join(log_dir, "play_cmd_vs_vel.png")
+        fig.savefig(plot_path)
+        print(f"[INFO] Saved command vs velocity plot to {plot_path}")
 
 
 if __name__ == "__main__":
