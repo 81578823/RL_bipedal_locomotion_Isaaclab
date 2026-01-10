@@ -7,6 +7,7 @@ from bipedal_locomotion.tasks.locomotion.cfg.PF.limx_base_env_cfg import PFEnvCf
 from bipedal_locomotion.tasks.locomotion.cfg.PF.limx_pf_rough_env_cfg import PFRoughEnvCfg
 from bipedal_locomotion.tasks.locomotion.cfg.PF.terrains_cfg import (
     BLIND_ROUGH_TERRAINS_CFG,
+    BLIND_ROUGH_TERRAINS_NEAR_CFG,
     BLIND_ROUGH_TERRAINS_PLAY_CFG,
     STAIRS_TERRAINS_CFG,
     STAIRS_TERRAINS_PLAY_CFG,
@@ -134,6 +135,9 @@ class PFRoughBaseEnvCfg_PLAY_NEAR(PFRoughBaseEnvCfg_PLAY):
             self.scene.terrain.terrain_generator.num_rows = 2
             self.scene.terrain.terrain_generator.num_cols = 2
             self.scene.terrain.terrain_generator.border_width = 2.0
+
+        # 使用精简的近场地形生成器 / use simplified near-field terrain generator
+        self.scene.terrain.terrain_generator = BLIND_ROUGH_TERRAINS_NEAR_CFG
 
         # 关闭课程，固定初始难度 / disable curriculum to avoid jumping to far tiles
         self.curriculum.terrain_levels = None

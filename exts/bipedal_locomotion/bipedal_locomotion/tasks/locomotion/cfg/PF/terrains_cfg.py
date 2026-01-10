@@ -114,6 +114,38 @@ BLIND_ROUGH_TERRAINS_CFG = TerrainGeneratorCfg(
     difficulty_range=(0.0, 1.0),       # 难度范围 0-1 / Difficulty range 0-1
 )
 
+# 盲视粗糙地形近场测试配置（精简子地形，仅倒金字塔楼梯 + 随机粗糙）
+# Blind rough terrain near-play configuration - only keep inverted pyramid stairs + random rough
+BLIND_ROUGH_TERRAINS_NEAR_CFG = TerrainGeneratorCfg(
+    seed=42,
+    size=(8.0, 8.0),
+    border_width=20.0,
+    num_rows=1,
+    num_cols=1,
+    horizontal_scale=0.1,
+    vertical_scale=0.005,
+    slope_threshold=0.75,
+    use_cache=True,
+    sub_terrains={
+        "pyramid_stairs_inv_1": terrain_gen.MeshInvertedPyramidStairsTerrainCfg(
+            proportion=0.5,
+            step_height_range=(0.05, 0.20),
+            step_width=stair_width[1],
+            platform_width=3.0,
+            border_width=1.0,
+            holes=False,
+        ),
+        "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
+            proportion=0.5,
+            noise_range=(0.02, 0.15),
+            noise_step=0.01,
+            border_width=0.25,
+        ),
+    },
+    curriculum=False,
+    difficulty_range=(1.0, 1.0),
+)
+
 # 盲视粗糙地形测试配置 - 用于策略评估
 # Blind rough terrain play configuration - for policy evaluation
 BLIND_ROUGH_TERRAINS_PLAY_CFG = TerrainGeneratorCfg(
