@@ -257,7 +257,7 @@ def main():
     obs_history = obs_dict["observations"].get("obsHistory")
     obs_history = obs_history.flatten(start_dim=1)
     commands = obs_dict["observations"].get("commands") 
-    # 记录命令与实际速度（限制记录步数防止占用过多内存） / buffers for cmd vs actual velocity
+    # 记录命令与实际速度（限制记录步数防止占用过多内存） / buffers for cmd vs actual velocity (all envs)
     log_cmd = []
     log_vel = []
     log_max = 800
@@ -297,14 +297,18 @@ def main():
             obs_history = obs_history.flatten(start_dim=1)
             commands = infos["observations"].get("commands") 
             obs_dict = infos  # 下一帧继续使用最新观测 / keep newest obs_dict for next loop
-            # 记录当前命令与实际速度（取第一个 env）/ log commanded vs actual base velocity
+            # 记录当前命令与实际速度（所有 env）/ log commanded vs actual base velocity
             if len(log_cmd) < log_max and isinstance(commands, torch.Tensor):
                 try:
-                    cmd_np = commands[0].detach().cpu().numpy()
+                    cmd_np = commands.detach().cpu().numpy()
                     robot = env.unwrapped.scene["robot"]
-                    base_vel = robot.data.root_lin_vel_w[:, :2]
-                    vel_np = base_vel[0].detach().cpu().numpy()
-                    log_cmd.append(cmd_np[:2])
+                    base_lin = robot.data.root_lin_vel_w[:, :2]
+                    base_ang = getattr(robot.data, "root_ang_vel_w", None)
+                    if base_ang is None:
+                        base_ang = torch.zeros_like(base_lin[:, :1])
+                    base_ang_z = base_ang[:, 2:3]
+                    vel_np = torch.cat((base_lin, base_ang_z), dim=-1).detach().cpu().numpy()
+                    log_cmd.append(cmd_np[:, :3])
                     log_vel.append(vel_np)
                 except Exception:
                     pass
@@ -319,21 +323,34 @@ def main():
         import matplotlib.pyplot as plt
 
         t = np.arange(len(log_cmd)) * env.unwrapped.step_dt
-        cmd_arr = np.vstack(log_cmd)
-        vel_arr = np.vstack(log_vel)
+        cmd_arr = np.stack(log_cmd)  # (steps, num_envs, 3)
+        vel_arr = np.stack(log_vel)  # (steps, num_envs, 3)
 
-        fig, axes = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
-        axes[0].plot(t, cmd_arr[:, 0], label="cmd vx")
-        axes[0].plot(t, vel_arr[:, 0], label="actual vx")
-        axes[0].set_ylabel("vx (m/s)")
-        axes[0].legend()
+        num_envs = cmd_arr.shape[1]
+        rng = np.random.default_rng(0)
+        colors = rng.random((num_envs, 3))
 
-        axes[1].plot(t, cmd_arr[:, 1], label="cmd vy")
-        axes[1].plot(t, vel_arr[:, 1], label="actual vy")
-        axes[1].set_ylabel("vy (m/s)")
+        fig, axes = plt.subplots(1, 3, figsize=(14, 4), sharex=True)
+        labels = ["vx", "vy", "wz"]
+
+        for i, label in enumerate(labels):
+            ax_v = axes[i]
+            for env_idx in range(num_envs):
+                color = colors[env_idx]
+                ax_v.plot(t, cmd_arr[:, env_idx, i], linestyle="--", color=color, alpha=0.6, label=None)
+                ax_v.plot(t, vel_arr[:, env_idx, i], linestyle="-", color=color, alpha=0.9, label=None)
+
+            avg_cmd = cmd_arr[:, :, i].mean(axis=1)
+            avg_vel = vel_arr[:, :, i].mean(axis=1)
+
+            ax_v.plot(t, avg_cmd, linestyle="--", color="k", linewidth=2.5, label="cmd avg")
+            ax_v.plot(t, avg_vel, linestyle="-", color="k", linewidth=2.5, label="actual avg")
+            ax_v.set_ylabel(f"{label} (m/s)" if i < 2 else f"{label} (rad/s)")
+            ax_v.legend(loc="upper right")
+
+        axes[0].set_xlabel("time (s)")
         axes[1].set_xlabel("time (s)")
-        axes[1].legend()
-
+        axes[2].set_xlabel("time (s)")
         fig.tight_layout()
         plot_path = os.path.join(log_dir, "play_cmd_vs_vel.png")
         fig.savefig(plot_path)
