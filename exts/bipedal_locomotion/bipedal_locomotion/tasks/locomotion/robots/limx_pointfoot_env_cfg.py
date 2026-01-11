@@ -63,7 +63,7 @@ class PFBaseEnvCfg_PLAY(PFBaseEnvCfg):
         # disable randomization for play
         self.observations.policy.enable_corruption = False
         # remove random pushing event
-        self.events.push_robot = None
+        self.events.push_robot = True
         # remove random base mass addition event
         self.events.add_base_mass = None
 
@@ -142,6 +142,7 @@ class PFRoughBaseEnvCfg_PLAY_NEAR(PFRoughBaseEnvCfg_PLAY):
         # 关闭课程，固定初始难度 / disable curriculum to avoid jumping to far tiles
         self.curriculum.terrain_levels = None
         self.scene.terrain.max_init_terrain_level = 0
+        self.events.push_robot = None
 
 
 ############################

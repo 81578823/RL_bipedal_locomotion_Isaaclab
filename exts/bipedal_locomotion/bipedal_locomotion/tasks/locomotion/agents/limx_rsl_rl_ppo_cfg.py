@@ -43,7 +43,7 @@ class PFPPORunnerCfg(RslRlOnPolicyRunnerCfg):
 @configclass
 class PF_TRON1AFlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
-    max_iterations = 3000         # 较短的训练周期，适合平地环境 / Shorter training for flat terrain
+    max_iterations = 10000         # 较短的训练周期，适合平地环境 / Shorter training for flat terrain
     save_interval = 200           # 更频繁的保存 / More frequent saving
     experiment_name = "pf_tron_1a_flat"
     empirical_normalization = False
