@@ -327,28 +327,36 @@ def main():
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
-        t = np.arange(len(log_cmd)) * env.unwrapped.step_dt
+        steps = np.arange(len(log_cmd))
         cmd_arr = np.vstack(log_cmd)
         vel_arr = np.vstack(log_vel)
         ang_cmd_arr = np.array(log_ang_cmd)
         ang_vel_arr = np.array(log_ang_vel)
 
+        # 均方误差 / mean squared error for each channel
+        mse_vx = float(np.mean((cmd_arr[:, 0] - vel_arr[:, 0]) ** 2))
+        mse_vy = float(np.mean((cmd_arr[:, 1] - vel_arr[:, 1]) ** 2))
+        mse_wz = float(np.mean((ang_cmd_arr - ang_vel_arr) ** 2))
+
         fig, axes = plt.subplots(3, 1, figsize=(8, 8), sharex=True)
-        axes[0].plot(t, cmd_arr[:, 0], label="cmd vx")
-        axes[0].plot(t, vel_arr[:, 0], label="actual vx")
+        axes[0].plot(steps, cmd_arr[:, 0], label="cmd vx")
+        axes[0].plot(steps, vel_arr[:, 0], label="actual vx")
         axes[0].set_ylabel("vx (m/s)")
         axes[0].legend()
+        axes[0].text(0.02, 0.9, f"MSE={mse_vx:.4f}", transform=axes[0].transAxes)
 
-        axes[1].plot(t, cmd_arr[:, 1], label="cmd vy")
-        axes[1].plot(t, vel_arr[:, 1], label="actual vy")
+        axes[1].plot(steps, cmd_arr[:, 1], label="cmd vy")
+        axes[1].plot(steps, vel_arr[:, 1], label="actual vy")
         axes[1].set_ylabel("vy (m/s)")
         axes[1].legend()
+        axes[1].text(0.02, 0.9, f"MSE={mse_vy:.4f}", transform=axes[1].transAxes)
 
-        axes[2].plot(t, ang_cmd_arr, label="cmd wz")
-        axes[2].plot(t, ang_vel_arr, label="actual wz")
+        axes[2].plot(steps, ang_cmd_arr, label="cmd wz")
+        axes[2].plot(steps, ang_vel_arr, label="actual wz")
         axes[2].set_ylabel("wz (rad/s)")
-        axes[2].set_xlabel("time (s)")
+        axes[2].set_xlabel("step")
         axes[2].legend()
+        axes[2].text(0.02, 0.9, f"MSE={mse_wz:.4f}", transform=axes[2].transAxes)
 
         fig.tight_layout()
         plot_path = os.path.join(log_dir, "play_cmd_vs_vel.png")
