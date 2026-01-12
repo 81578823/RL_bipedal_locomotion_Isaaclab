@@ -260,6 +260,8 @@ def main():
     # 记录命令与实际速度（限制记录步数防止占用过多内存） / buffers for cmd vs actual velocity
     log_cmd = []
     log_vel = []
+    log_ang_cmd = []
+    log_ang_vel = []
     log_max = 800
     # simulate environment
     maxstep=800
@@ -303,9 +305,16 @@ def main():
                     cmd_np = commands[0].detach().cpu().numpy()
                     robot = env.unwrapped.scene["robot"]
                     base_vel = robot.data.root_lin_vel_w[:, :2]
-                    vel_np = base_vel[0].detach().cpu().numpy()
+                    base_ang_vel = robot.data.root_ang_vel_w[:, -1]
+                    # 将实际速度映射到命令坐标系：vx 对应 base_vel_y，vy 对应 -base_vel_x
+                    vel_np = torch.stack(
+                        (-base_vel[0, 1], base_vel[0, 0])
+                    ).detach().cpu().numpy()
+                    ang_vel_np = float(base_ang_vel[0].detach().cpu().item())
                     log_cmd.append(cmd_np[:2])
                     log_vel.append(vel_np)
+                    log_ang_cmd.append(cmd_np[2] if cmd_np.shape[0] > 2 else 0.0)
+                    log_ang_vel.append(ang_vel_np)
                 except Exception:
                     pass
 
@@ -321,8 +330,10 @@ def main():
         t = np.arange(len(log_cmd)) * env.unwrapped.step_dt
         cmd_arr = np.vstack(log_cmd)
         vel_arr = np.vstack(log_vel)
+        ang_cmd_arr = np.array(log_ang_cmd)
+        ang_vel_arr = np.array(log_ang_vel)
 
-        fig, axes = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
+        fig, axes = plt.subplots(3, 1, figsize=(8, 8), sharex=True)
         axes[0].plot(t, cmd_arr[:, 0], label="cmd vx")
         axes[0].plot(t, vel_arr[:, 0], label="actual vx")
         axes[0].set_ylabel("vx (m/s)")
@@ -331,8 +342,13 @@ def main():
         axes[1].plot(t, cmd_arr[:, 1], label="cmd vy")
         axes[1].plot(t, vel_arr[:, 1], label="actual vy")
         axes[1].set_ylabel("vy (m/s)")
-        axes[1].set_xlabel("time (s)")
         axes[1].legend()
+
+        axes[2].plot(t, ang_cmd_arr, label="cmd wz")
+        axes[2].plot(t, ang_vel_arr, label="actual wz")
+        axes[2].set_ylabel("wz (rad/s)")
+        axes[2].set_xlabel("time (s)")
+        axes[2].legend()
 
         fig.tight_layout()
         plot_path = os.path.join(log_dir, "play_cmd_vs_vel.png")
