@@ -41,6 +41,7 @@ import gymnasium as gym
 import os
 import torch
 import numpy as np
+import math
 
 from rsl_rl.runner import OnPolicyRunner
 
@@ -79,20 +80,24 @@ def main():
     # 创建isaac环境 / Create isaac environment
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
 
+    # convert to single-agent instance if required by the RL algorithm
+    if isinstance(env.unwrapped, DirectMARLEnv):
+        env = multi_agent_to_single_agent(env)
+
+    # 最大步数固定 800：录像、绘图、仿真循环统一使用， 这里 100step对应 25s
+    max_steps = 250
+
+    # Wrap video capture after any MARL -> single-agent conversion to avoid losing the wrapper
     if args_cli.video:
         video_kwargs = {
             "video_folder": os.path.join(log_dir, "videos", "play"),
             "step_trigger": lambda step: step == 0,
-            "video_length": args_cli.video_length,
+            "video_length": max_steps,
             "disable_logger": True,
         }
         print("[INFO] Recording videos during training.")
         print_dict(video_kwargs, nesting=4)
         env = gym.wrappers.RecordVideo(env, **video_kwargs)
-
-    # convert to single-agent instance if required by the RL algorithm
-    if isinstance(env.unwrapped, DirectMARLEnv):
-        env = multi_agent_to_single_agent(env)
 
     # wrap around environment for rsl-rl
     env = RslRlVecEnvWrapper(env)
@@ -233,7 +238,89 @@ def main():
             cmd_tensor[:, 3] = 0.0
         return cmd_tensor
 
-     # 导出策略到onnx / Export policy to onnx
+    def _resolve_key_codes(*names):
+        """Return available KeyboardInput enums from candidate attribute names."""
+        codes = []
+        for name in names:
+            code = getattr(carb.input.KeyboardInput, name, None)
+            if code is not None:
+                codes.append(code)
+        return tuple(codes)
+
+    # 数字键（主键盘和小键盘）候选枚举名称 / Candidate enum names for number keys
+    DIGIT_KEYS = {
+        "1": _resolve_key_codes("_1", "KEY_1", "ONE", "KP_1", "NUMPAD_1"),
+        "2": _resolve_key_codes("_2", "KEY_2", "TWO", "KP_2", "NUMPAD_2"),
+        "3": _resolve_key_codes("_3", "KEY_3", "THREE", "KP_3", "NUMPAD_3"),
+        "4": _resolve_key_codes("_4", "KEY_4", "FOUR", "KP_4", "NUMPAD_4"),
+    }
+
+    def _get_step_dt_seconds():
+        """Estimate simulated seconds per env.step for cooldown calculation."""
+        sim_dt = None
+        decimation = 1
+        try:
+            sim_dt = float(getattr(env.unwrapped.sim, "dt", 0.0))
+        except Exception:
+            sim_dt = None
+        try:
+            decimation = float(getattr(env.unwrapped, "decimation", 1))
+        except Exception:
+            decimation = 1
+        if sim_dt is None or sim_dt <= 0.0:
+            sim_dt = 0.02
+        return max(sim_dt * decimation, 1e-4)
+
+    def _get_base_body_ids(robot):
+        """Resolve base body ids; fallback to first body if name lookup fails."""
+        def _to_int_ids(values):
+            ids = []
+            for v in values:
+                if isinstance(v, (int, np.integer)):
+                    ids.append(int(v))
+                elif isinstance(v, str):
+                    try:
+                        if hasattr(robot, "body_names") and v in robot.body_names:
+                            ids.append(int(robot.body_names.index(v)))
+                    except Exception:
+                        continue
+            return ids
+
+        if hasattr(robot, "find_bodies"):
+            try:
+                ids = _to_int_ids(robot.find_bodies("base_Link"))
+                if ids:
+                    return ids
+            except Exception:
+                pass
+        try:
+            if hasattr(robot, "body_names") and "base_Link" in robot.body_names:
+                return [int(robot.body_names.index("base_Link"))]
+        except Exception:
+            pass
+        return [0]
+
+    def _apply_body_push(robot, force_body, body_ids=None):
+        """Apply a one-frame body-frame force to all envs on selected bodies."""
+        if robot is None or not hasattr(robot, "set_external_force_and_torque"):
+            return
+        device = robot.device
+        num_envs = robot.num_instances if hasattr(robot, "num_instances") else env.unwrapped.scene.num_envs
+        env_ids = torch.arange(num_envs, device=device)
+        target_body_ids = body_ids if body_ids is not None else [0]
+        base_force_buffer = getattr(robot, "_external_force_b", None)
+        dtype = base_force_buffer.dtype if base_force_buffer is not None else torch.float32
+        force_tensor = torch.tensor(force_body, device=device, dtype=dtype)
+        force_tensor = force_tensor.view(1, 1, 3).expand(len(env_ids), len(target_body_ids), 3).clone()
+        torque_tensor = torch.zeros_like(force_tensor)
+        # Clear any previous external force/torque to avoid accumulation
+        if base_force_buffer is not None:
+            robot._external_force_b *= 0
+        if hasattr(robot, "_external_torque_b"):
+            robot._external_torque_b *= 0
+        robot.set_external_force_and_torque(force_tensor, torque_tensor, env_ids=env_ids, body_ids=target_body_ids)
+
+    # 导出策略到onnx / Export policy to onnx
     if EXPORT_POLICY:
         export_model_dir = os.path.join(os.path.dirname(resume_path), "exported")
         export_policy_as_jit(
@@ -257,16 +344,39 @@ def main():
     obs_history = obs_dict["observations"].get("obsHistory")
     obs_history = obs_history.flatten(start_dim=1)
     commands = obs_dict["observations"].get("commands") 
+    # 禁用随机推搡事件，仅在play阶段 / Disable stochastic push during play only
+    if hasattr(env.unwrapped, "event_manager"):
+        try:
+            term_cfg = env.unwrapped.event_manager.get_term_cfg("push_robot")
+            if hasattr(term_cfg, "params") and isinstance(term_cfg.params, dict):
+                term_cfg.params["probability"] = 0.0
+            env.unwrapped.event_manager.set_term_cfg("push_robot", term_cfg)
+            print("[INFO] Disabled stochastic push_robot event during play.")
+        except Exception:
+            pass
+    # 手动push参数 / Manual push settings
+    push_force_templates = [
+        {"keys": DIGIT_KEYS["1"], "force": (700.0, 0.0, 0.0), "desc": "forward"},
+        {"keys": DIGIT_KEYS["2"], "force": (-800.0, 0.0, 0.0), "desc": "backward"},
+        {"keys": DIGIT_KEYS["3"], "force": (0.0, 900.0, 0.0), "desc": "left"},
+        {"keys": DIGIT_KEYS["4"], "force": (0.0, -1000.0, 0.0), "desc": "right"},
+    ]
+    push_cooldown_steps = max(1, int(math.ceil(0.5 / _get_step_dt_seconds())))
+    last_push_step = -push_cooldown_steps
+    robot_asset = env.unwrapped.scene["robot"]
+    push_body_ids = _get_base_body_ids(robot_asset)
     # 记录命令与实际速度（限制记录步数防止占用过多内存） / buffers for cmd vs actual velocity
     log_cmd = []
     log_vel = []
     log_ang_cmd = []
     log_ang_vel = []
-    log_max = 800
+    log_max = max_steps
     # simulate environment
-    maxstep=800
+    maxstep = max_steps
     step = 0
     while simulation_app.is_running() and step < maxstep:
+        if step % 100 == 0:
+            print(f"[DEBUG] step={step}, maxstep={maxstep}, sim_running={simulation_app.is_running()}")
         step += 1
         # run everything in inference mode
         with torch.inference_mode():
@@ -289,6 +399,18 @@ def main():
                     # 回退仅供策略输入使用，不会影响环境内部命令 / fallback only affects policy input
                     commands = apply_keyboard_commands(commands)
                     commands = apply_gamepad_commands(commands)
+
+            # 处理自定义push（相对机器人朝向，0.5s冷却） / Handle custom pushes (body-frame, 0.5s cooldown)
+            if keyboard is not None and keyboard_sub_id is not None:
+                if (step - last_push_step) >= push_cooldown_steps:
+                    triggered = None
+                    for tpl in push_force_templates:
+                        if any(code in pressed_keys for code in tpl["keys"]):
+                            triggered = tpl
+                            break
+                    if triggered is not None and len(triggered["keys"]) > 0:
+                        _apply_body_push(robot_asset, triggered["force"], body_ids=push_body_ids)
+                        last_push_step = step
 
             # agent stepping
             est = encoder(obs_history)
@@ -317,6 +439,8 @@ def main():
                     log_ang_vel.append(ang_vel_np)
                 except Exception:
                     pass
+
+    print(f"[INFO] Exiting play loop at step {step}")
 
     # close the simulator
     env.close()
