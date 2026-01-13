@@ -120,8 +120,8 @@ BLIND_ROUGH_TERRAINS_NEAR_CFG = TerrainGeneratorCfg(
     seed=42,
     size=(8.0, 8.0),
     border_width=20.0,
-    num_rows=1,
-    num_cols=1,
+    num_rows=2,
+    num_cols=2,
     horizontal_scale=0.1,
     vertical_scale=0.005,
     slope_threshold=0.75,
@@ -129,7 +129,7 @@ BLIND_ROUGH_TERRAINS_NEAR_CFG = TerrainGeneratorCfg(
     sub_terrains={
         "pyramid_stairs_inv_1": terrain_gen.MeshInvertedPyramidStairsTerrainCfg(
             proportion=0.5,
-            step_height_range=(0.05, 0.20),
+            step_height_range=(0.22, 0.22),
             step_width=stair_width[1],
             platform_width=3.0,
             border_width=1.0,
@@ -137,7 +137,7 @@ BLIND_ROUGH_TERRAINS_NEAR_CFG = TerrainGeneratorCfg(
         ),
         "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
             proportion=0.5,
-            noise_range=(0.02, 0.15),
+            noise_range=(0.2, 0.3),
             noise_step=0.01,
             border_width=0.25,
         ),
