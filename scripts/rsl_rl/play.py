@@ -356,9 +356,9 @@ def main():
             pass
     # 手动push参数 / Manual push settings
     push_force_templates = [
-        {"keys": DIGIT_KEYS["1"], "force": (700.0, 0.0, 0.0), "desc": "forward"},
-        {"keys": DIGIT_KEYS["2"], "force": (-800.0, 0.0, 0.0), "desc": "backward"},
-        {"keys": DIGIT_KEYS["3"], "force": (0.0, 900.0, 0.0), "desc": "left"},
+        {"keys": DIGIT_KEYS["1"], "force": (1600.0, 0.0, 0.0), "desc": "forward"},
+        {"keys": DIGIT_KEYS["2"], "force": (-1400.0, 0.0, 0.0), "desc": "backward"},
+        {"keys": DIGIT_KEYS["3"], "force": (0.0, 1200.0, 0.0), "desc": "left"},
         {"keys": DIGIT_KEYS["4"], "force": (0.0, -1000.0, 0.0), "desc": "right"},
     ]
     push_cooldown_steps = max(1, int(math.ceil(0.5 / _get_step_dt_seconds())))
@@ -371,6 +371,16 @@ def main():
     log_ang_cmd = []
     log_ang_vel = []
     log_max = max_steps
+    log_counter = 0
+    
+    # 获取命令接口
+    cmd_term = None
+    if hasattr(env.unwrapped, "command_manager"):
+        try:
+            cmd_term = env.unwrapped.command_manager.get_term("base_velocity")
+        except Exception:
+            cmd_term = None
+    
     # simulate environment
     maxstep = max_steps
     step = 0
@@ -382,23 +392,39 @@ def main():
         with torch.inference_mode():
             # 读取手柄并更新命令：直接写入 env 的 base_velocity 命令缓冲 / Poll gamepad to drive base_velocity
             if "commands" in obs_dict["observations"]:
-                # 优先直接修改 command_term 的 buffer，避免缺少 set_command 接口 / mutate term buffer directly
-                cmd_term = None
-                if hasattr(env.unwrapped, "command_manager"):
-                    try:
-                        cmd_term = env.unwrapped.command_manager.get_term("base_velocity")
-                    except Exception:
-                        cmd_term = None
-                # commands 张量形状 (num_envs, 4): [lin_x, lin_y, ang_z, heading]
+                # 先获取当前命令
+                current_commands = commands.clone() if isinstance(commands, torch.Tensor) else commands.copy()
+                
+                # 应用键盘/手柄输入
                 if cmd_term is not None and hasattr(cmd_term, "command"):
-                    # 先键盘、后手柄：键盘存在则覆盖，否则尝试手柄 / keyboard first, then gamepad
+                    # 记录应用前的命令
+                    cmd_before = cmd_term.command.clone()
+                    # 应用键盘/手柄输入
                     cmd_term.command[:] = apply_keyboard_commands(cmd_term.command)
                     cmd_term.command[:] = apply_gamepad_commands(cmd_term.command)
-                    commands = cmd_term.command
+                    # 记录应用后的命令
+                    commands = cmd_term.command.clone()
                 else:
-                    # 回退仅供策略输入使用，不会影响环境内部命令 / fallback only affects policy input
+                    # 回退方案
                     commands = apply_keyboard_commands(commands)
                     commands = apply_gamepad_commands(commands)
+                
+                # 记录命令
+                if log_counter < log_max and isinstance(commands, torch.Tensor):
+                    try:
+                        cmd_np = commands[0].detach().cpu().numpy()
+                        
+                        # 记录命令
+                        log_cmd.append(cmd_np[:2])  # vx, vy
+                        if cmd_np.shape[0] > 2:
+                            log_ang_cmd.append(cmd_np[2])  # wz
+                        else:
+                            log_ang_cmd.append(0.0)
+                        
+                        log_counter += 1
+                    except Exception as e:
+                        print(f"[ERROR] Failed to log command at step {step}: {e}")
+                        pass
 
             # 处理自定义push（相对机器人朝向，0.5s冷却） / Handle custom pushes (body-frame, 0.5s cooldown)
             if keyboard is not None and keyboard_sub_id is not None:
@@ -421,24 +447,48 @@ def main():
             obs_history = obs_history.flatten(start_dim=1)
             commands = infos["observations"].get("commands") 
             obs_dict = infos  # 下一帧继续使用最新观测 / keep newest obs_dict for next loop
-            # 记录当前命令与实际速度（取第一个 env）/ log commanded vs actual base velocity
-            if len(log_cmd) < log_max and isinstance(commands, torch.Tensor):
+            
+            # 在步进后记录实际速度
+            if len(log_vel) < len(log_cmd):  # 确保与命令对应
                 try:
-                    cmd_np = commands[0].detach().cpu().numpy()
                     robot = env.unwrapped.scene["robot"]
-                    base_vel = robot.data.root_lin_vel_w[:, :2]
-                    base_ang_vel = robot.data.root_ang_vel_w[:, -1]
-                    # 将实际速度映射到命令坐标系：vx 对应 base_vel_y，vy 对应 -base_vel_x
-                    vel_np = torch.stack(
-                        (-base_vel[0, 1], base_vel[0, 0])
-                    ).detach().cpu().numpy()
-                    ang_vel_np = float(base_ang_vel[0].detach().cpu().item())
-                    log_cmd.append(cmd_np[:2])
+                    
+                    # 获取机体坐标系下的实际速度
+                    if hasattr(robot.data, 'root_lin_vel_b'):
+                        # 如果机器人数据直接提供机体坐标系速度
+                        base_vel_b = robot.data.root_lin_vel_b[0, :2]
+                        base_ang_vel_b = robot.data.root_ang_vel_b[0, 2]  # 假设z轴是偏航
+                    else:
+                        # 否则从世界坐标系转换到机体坐标系
+                        from isaaclab.utils.math import quat_rotate, quat_inv
+                        quat = robot.data.root_quat_w[0]  # 四元数
+                        base_vel_w = robot.data.root_lin_vel_w[0, :3]
+                        base_ang_vel_w = robot.data.root_ang_vel_w[0, :3]
+                        
+                        # 将世界坐标系速度转换到机体坐标系
+                        base_vel_b = quat_rotate(quat_inv(quat), base_vel_w)
+                        base_ang_vel_b = quat_rotate(quat_inv(quat), base_ang_vel_w)
+                        base_ang_vel_b = base_ang_vel_b[2]  # 只取z轴分量
+                    
+                    vel_np = base_vel_b.detach().cpu().numpy()
+                    ang_vel_np = base_ang_vel_b.detach().cpu().item() if hasattr(base_ang_vel_b, 'item') else float(base_ang_vel_b)
+                    
                     log_vel.append(vel_np)
-                    log_ang_cmd.append(cmd_np[2] if cmd_np.shape[0] > 2 else 0.0)
                     log_ang_vel.append(ang_vel_np)
-                except Exception:
-                    pass
+                    
+                    # 调试输出
+                    if step % 50 == 0 and len(log_cmd) > 0 and len(log_vel) > 0:
+                        idx = len(log_vel) - 1
+                        print(f"[DEBUG] Step {step}: "
+                              f"Cmd=[{log_cmd[idx][0]:.2f}, {log_cmd[idx][1]:.2f}, {log_ang_cmd[idx]:.2f}], "
+                              f"Vel=[{log_vel[idx][0]:.2f}, {log_vel[idx][1]:.2f}, {log_ang_vel[idx]:.2f}]")
+                    
+                except Exception as e:
+                    print(f"[ERROR] Failed to log velocity at step {step}: {e}")
+                    # 添加占位符
+                    if len(log_vel) < len(log_cmd):
+                        log_vel.append(np.array([0.0, 0.0]))
+                        log_ang_vel.append(0.0)
 
     print(f"[INFO] Exiting play loop at step {step}")
 
@@ -446,12 +496,19 @@ def main():
     env.close()
 
     # 保存命令与实际速度曲线 / save plot of command vs velocity
-    if len(log_cmd) > 0:
+    # 确保命令和速度数组长度相同
+    min_len = min(len(log_cmd), len(log_vel))
+    if min_len > 0:
+        log_cmd = log_cmd[:min_len]
+        log_vel = log_vel[:min_len]
+        log_ang_cmd = log_ang_cmd[:min_len]
+        log_ang_vel = log_ang_vel[:min_len]
+        
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
-        steps = np.arange(len(log_cmd))
+        steps = np.arange(min_len)
         cmd_arr = np.vstack(log_cmd)
         vel_arr = np.vstack(log_vel)
         ang_cmd_arr = np.array(log_ang_cmd)
@@ -462,30 +519,56 @@ def main():
         mse_vy = float(np.mean((cmd_arr[:, 1] - vel_arr[:, 1]) ** 2))
         mse_wz = float(np.mean((ang_cmd_arr - ang_vel_arr) ** 2))
 
-        fig, axes = plt.subplots(3, 1, figsize=(8, 8), sharex=True)
-        axes[0].plot(steps, cmd_arr[:, 0], label="cmd vx")
-        axes[0].plot(steps, vel_arr[:, 0], label="actual vx")
+        fig, axes = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
+        
+        # 绘制x方向速度
+        axes[0].plot(steps, cmd_arr[:, 0], 'b-', linewidth=1.5, alpha=0.7, label="Command vx")
+        axes[0].plot(steps, vel_arr[:, 0], 'r-', linewidth=1.5, alpha=0.7, label="Actual vx")
         axes[0].set_ylabel("vx (m/s)")
-        axes[0].legend()
-        axes[0].text(0.02, 0.9, f"MSE={mse_vx:.4f}", transform=axes[0].transAxes)
-
-        axes[1].plot(steps, cmd_arr[:, 1], label="cmd vy")
-        axes[1].plot(steps, vel_arr[:, 1], label="actual vy")
+        axes[0].legend(loc='upper right')
+        axes[0].grid(True, alpha=0.3)
+        axes[0].text(0.02, 0.95, f"MSE={mse_vx:.4f}", transform=axes[0].transAxes, 
+                    bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.7))
+        
+        # 绘制y方向速度
+        axes[1].plot(steps, cmd_arr[:, 1], 'g-', linewidth=1.5, alpha=0.7, label="Command vy")
+        axes[1].plot(steps, vel_arr[:, 1], 'm-', linewidth=1.5, alpha=0.7, label="Actual vy")
         axes[1].set_ylabel("vy (m/s)")
-        axes[1].legend()
-        axes[1].text(0.02, 0.9, f"MSE={mse_vy:.4f}", transform=axes[1].transAxes)
-
-        axes[2].plot(steps, ang_cmd_arr, label="cmd wz")
-        axes[2].plot(steps, ang_vel_arr, label="actual wz")
+        axes[1].legend(loc='upper right')
+        axes[1].grid(True, alpha=0.3)
+        axes[1].text(0.02, 0.95, f"MSE={mse_vy:.4f}", transform=axes[1].transAxes,
+                    bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.7))
+        
+        # 绘制角速度
+        axes[2].plot(steps, ang_cmd_arr, 'c-', linewidth=1.5, alpha=0.7, label="Command wz")
+        axes[2].plot(steps, ang_vel_arr, 'orange', linewidth=1.5, alpha=0.7, label="Actual wz")
         axes[2].set_ylabel("wz (rad/s)")
-        axes[2].set_xlabel("step")
-        axes[2].legend()
-        axes[2].text(0.02, 0.9, f"MSE={mse_wz:.4f}", transform=axes[2].transAxes)
-
-        fig.tight_layout()
+        axes[2].set_xlabel("Step")
+        axes[2].legend(loc='upper right')
+        axes[2].grid(True, alpha=0.3)
+        axes[2].text(0.02, 0.95, f"MSE={mse_wz:.4f}", transform=axes[2].transAxes,
+                    bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.7))
+        
+        # 添加总标题
+        fig.suptitle(f"Command vs Actual Velocity (Steps: {min_len})", fontsize=12)
+        fig.tight_layout(rect=(0, 0, 1, 0.96))
+        
+        # 保存图片
         plot_path = os.path.join(log_dir, "play_cmd_vs_vel.png")
-        fig.savefig(plot_path)
-        print(f"[INFO] Saved command vs velocity plot to {plot_path}")
+        fig.savefig(plot_path, dpi=150, bbox_inches='tight')
+        print(f"[INFO] Saved command vs velocity plot ({min_len} steps) to {plot_path}")
+        
+        # 可选：保存数据为CSV文件以便进一步分析
+        data_path = os.path.join(log_dir, "cmd_vel_data.csv")
+        data = np.column_stack([steps, cmd_arr[:, 0], vel_arr[:, 0], 
+                               cmd_arr[:, 1], vel_arr[:, 1], 
+                               ang_cmd_arr, ang_vel_arr])
+        np.savetxt(data_path, data, delimiter=',',
+                   header='step,cmd_vx,act_vx,cmd_vy,act_vy,cmd_wz,act_wz',
+                   comments='', fmt='%.6f')
+        print(f"[INFO] Saved command/velocity data to {data_path}")
+    else:
+        print(f"[WARNING] No velocity data recorded. log_cmd={len(log_cmd)}, log_vel={len(log_vel)}")
 
 
 if __name__ == "__main__":
