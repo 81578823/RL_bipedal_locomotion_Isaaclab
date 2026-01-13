@@ -405,10 +405,15 @@ class RewardsCfg:
 
     # tracking related rewards
     rew_lin_vel_xy = RewTerm(
-        func=mdp.track_lin_vel_xy_exp, weight=6.0, params={"command_name": "base_velocity", "std": math.sqrt(0.2)}
+        func=mdp.track_lin_vel_xy_exp, weight=12.0, params={"command_name": "base_velocity", "std": math.sqrt(0.2)}
     )
     rew_ang_vel_z = RewTerm(
-        func=mdp.track_ang_vel_z_exp, weight=3, params={"command_name": "base_velocity", "std": math.sqrt(0.2)}
+        func=mdp.track_ang_vel_z_exp, weight=6, params={"command_name": "base_velocity", "std": math.sqrt(0.2)}
+    )
+    pen_axis_drift = RewTerm(
+        func=mdp.axis_aligned_stillness,
+        weight=-0.5,
+        params={"command_name": "base_velocity", "min_command_mag": 0.2, "dominance_margin": 0.05},
     )
 
     # 调节相关奖励 / Regulation-related rewards

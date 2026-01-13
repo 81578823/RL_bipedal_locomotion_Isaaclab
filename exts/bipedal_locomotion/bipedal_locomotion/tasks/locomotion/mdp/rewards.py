@@ -323,6 +323,43 @@ def stand_still(
     return total_reward
 
 
+def axis_aligned_stillness(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    min_command_mag: float = 0.2,
+    dominance_margin: float = 0.05,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Penalize drift on the uncommanded axis when a single-axis linear command is given.
+
+    When the commanded linear velocity is clearly aligned with x (or y) and large enough,
+    lateral drift on the perpendicular axis is penalized to keep the motion axis-stable.
+    """
+    asset: RigidObject | Articulation = env.scene[asset_cfg.name]
+    base_vel_xy = asset.data.root_lin_vel_w[:, :2]
+
+    commands = env.command_manager.get_command(command_name)
+    cmd_xy = commands[:, :2]
+    cmd_abs = torch.abs(cmd_xy)
+
+    dominant_x = (cmd_abs[:, 0] - cmd_abs[:, 1]) > dominance_margin
+    dominant_y = (cmd_abs[:, 1] - cmd_abs[:, 0]) > dominance_margin
+
+    apply_x = dominant_x & (cmd_abs[:, 0] > min_command_mag)
+    apply_y = dominant_y & (cmd_abs[:, 1] > min_command_mag)
+
+    # Penalize velocity on the uncommanded axis only when one axis is dominant.
+    drift_penalty = torch.zeros(env.num_envs, device=env.device)
+    drift_penalty = drift_penalty + torch.where(
+        apply_x, torch.square(base_vel_xy[:, 1]), torch.zeros_like(drift_penalty)
+    )
+    drift_penalty = drift_penalty + torch.where(
+        apply_y, torch.square(base_vel_xy[:, 0]), torch.zeros_like(drift_penalty)
+    )
+
+    return drift_penalty
+
+
 def feet_regulation(env: ManagerBasedRLEnv,
     asset_cfg: SceneEntityCfg,
     foot_radius: float,

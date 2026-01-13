@@ -85,7 +85,7 @@ def main():
         env = multi_agent_to_single_agent(env)
 
     # 最大步数固定 800：录像、绘图、仿真循环统一使用， 这里 100step对应 25s
-    max_steps = 250
+    max_steps = 400
 
     # Wrap video capture after any MARL -> single-agent conversion to avoid losing the wrapper
     if args_cli.video:
