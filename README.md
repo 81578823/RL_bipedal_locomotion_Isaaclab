@@ -14,8 +14,7 @@
 
 ## Overview
 
-This repository is based on [this repo](http://8.141.22.226/Bobbin/limxtron1lab.git), and is used to train and simulate bipedal robots, such as [limxdynamics TRON1](https://www.limxdynamics.com/en/tron1).
-With the help of [IsaacLab](https://github.com/isaac-sim/IsaacLab), we can train the bipedal robots to walk in different environments, such as flat, rough, and stairs.
+This project trains and simulates bipedal robots—such as the [limxdynamics TRON1](https://www.limxdynamics.com/en/tron1)—using [IsaacLab](https://github.com/isaac-sim/IsaacLab) to develop gait policies for flat ground, uneven terrain, and stairs.
 
 **Keywords:** isaaclab, locomotion, bipedal, pointfoot, TRON1
 
@@ -93,35 +92,33 @@ python scripts/rsl_rl/play.py --task=Isaac-Limx-PF-Blind-Flat-Play-v0 --num_envs
 python3 scripts/rsl_rl/play.py   --task=Isaac-Limx-PF-Blind-Rough-Play-Near-v0   --checkpoint_path=/path_to_ckpt  --num_envs=1 --video --video_length 800
 ```
 
-- The following arguments can be used to customize the playing:
-    * --num_envs: Number of parallel environments to run
-    * --headless: Run the simulation in headless mode
-    * --checkpoint_path: Path to the checkpoint to load
-    * --video: whether to load video or not, it is highly recommended to load the video.
-    * --video_length: how many steps you would like to load the video
-- The following are some keyboard commands for in the play.py script:
-    * Directions1:
-     W:forward,A:leftward,S:backward,D:rightward.
-    * Directions2: play.py also supports gamepads if you could connnect it with the computer.
-    * Push forces: 1:push forward,2:push leftward,3:push backward,4:push rightward.
-    * the value of the commands could be adjusted in play.py.
-- play.py also supports angular and linear velocity tracking
+- You can customize `play.py` with:
+  * `--num_envs`: number of parallel environments
+  * `--headless`: run without rendering
+  * `--checkpoint_path`: checkpoint to load
+  * `--video`: enable video capture (recommended)
+  * `--video_length`: number of steps to record
+
+- Keyboard/gamepad controls:
+  * Directions (WASD): W forward, A left, S back, D right
+  * Gamepad: supported when connected
+  * Push forces: 1 forward, 2 left, 3 back, 4 right (tunable in `play.py`)
+
+- Also supports angular and linear velocity tracking.
+
 
 ## Video Demonstration
 
 ### Simulation in IsaacLab
-- **multi-terrain-traversal**:
+- **Multi-terrain traversal**  
+  ![multi-terrain-traversal](./media/multi-terrain-traversal.gif)
 
-![multi-terrain-traversal](./media/multi-terrain-traversal.gif)
+- **High-accuracy speed tracking**  
+  ![speed tracking](./media/speed_tracking.gif)
 
-- **high accuracy speed tracking**:
+  <p align="left">
+      <img alt="CLEARLAB" src="./media/speed_tracking.PNG" height="317">
+  </p>
 
-![speed tracking](./media/speed_tracking.gif)
-
-<p align="left">
-    <img alt="CLEARLAB" src="./media/speed_tracking.PNG" height="317">
-</p>
-
-- **high pushing limit**:
-
-![pushing](./media/push.gif)
+- **High pushing tolerance**  
+  ![pushing](./media/push.gif)
