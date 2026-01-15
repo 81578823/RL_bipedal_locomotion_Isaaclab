@@ -14,7 +14,7 @@
 
 ## Overview
 
-This repository is used to train and simulate bipedal robots, such as [limxdynamics TRON1](https://www.limxdynamics.com/en/tron1).
+This repository is based on [this repo](http://8.141.22.226/Bobbin/limxtron1lab.git), and is used to train and simulate bipedal robots, such as [limxdynamics TRON1](https://www.limxdynamics.com/en/tron1).
 With the help of [IsaacLab](https://github.com/isaac-sim/IsaacLab), we can train the bipedal robots to walk in different environments, such as flat, rough, and stairs.
 
 **Keywords:** isaaclab, locomotion, bipedal, pointfoot, TRON1
@@ -118,8 +118,8 @@ python3 scripts/rsl_rl/play.py   --task=Isaac-Limx-PF-Blind-Rough-Play-Near-v0  
 
 ![speed tracking](./media/speed_tracking.gif)
 
-<p align="center">
-    <img alt="CLEARLAB" src="./media/speed_tracking.PNG" height="200">
+<p align="left">
+    <img alt="CLEARLAB" src="./media/speed_tracking.PNG" height="317">
 </p>
 
 - **high pushing limit**:
