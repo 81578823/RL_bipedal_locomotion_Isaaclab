@@ -68,6 +68,10 @@ And then you can use the ```F5``` key to debug this project, which will launch d
 
 ```bash
 python scripts/rsl_rl/train.py --task=Isaac-Limx-PF-Blind-Flat-v0 --headless
+
+#or the following for rough terrains
+
+python scripts/rsl_rl/train.py --task=Isaac-Limx-PF-Blind-Rough-v0 --headless
 ```
 
 - The following arguments can be used to customize the training:
@@ -82,55 +86,42 @@ python scripts/rsl_rl/train.py --task=Isaac-Limx-PF-Blind-Flat-v0 --headless
 - To play a trained model:
 
 ```bash
+#this is for flat terrain
 python scripts/rsl_rl/play.py --task=Isaac-Limx-PF-Blind-Flat-Play-v0 --num_envs=10
+
+#this is for multi-terrains
+python3 scripts/rsl_rl/play.py   --task=Isaac-Limx-PF-Blind-Rough-Play-Near-v0   --checkpoint_path=/path_to_ckpt  --num_envs=1 --video --video_length 800
 ```
 
 - The following arguments can be used to customize the playing:
     * --num_envs: Number of parallel environments to run
     * --headless: Run the simulation in headless mode
     * --checkpoint_path: Path to the checkpoint to load
-
-## Run the exported model in mujoco (sim2sim)
-
-- After playing the model, the policy has already been saved. You can export the policy to mujoco environment and run it in mujoco [tron1-mujoco-sim]((https://github.com/limxdynamics/tron1-mujoco-sim)) by using the [tron1-rl-deploy-python]((https://github.com/limxdynamics/tron1-rl-deploy-python)).
-
-- Following the instructions to install it properly and replace the origin policy by your trained `policy.onnx` and `encoder.onnx`.
-
-## Run the exported model in real robot (sim2real)
-
-- Real deployment details see section https://support.limxdynamics.com/docs/tron-1-sdk/rl-training-results-deployment 8.1 ~ 8.2
-
-## Overview of the learning framework
-
-<p align="center">
-    <img alt="Figure2 of CTS" src="./media/learning_frame.png">
-</p>
-
-- The policies are trained using PPO within an asymmetric actor-critic framework, with actions determined by history observations latent and proprioceptive observation. **Inspired by the paper CTS: Concurrent Teacher-Student Reinforcement Learning for Legged Locomotion. ([H. Wang, H. Luo, W. Zhang, and H. Chen (2024)](https://doi.org/10.1109/LRA.2024.3457379))**
-
+    * --video: whether to load video or not, it is highly recommended to load the video.
+    * --video_length: how many steps you would like to load the video
+- The following are some keyboard commands for in the play.py script:
+    * Directions1:
+     W:forward,A:leftward,S:backward,D:rightward.
+    * Directions2: play.py also supports gamepads if you could connnect it with the computer.
+    * Push forces: 1:push forward,2:push leftward,3:push backward,4:push rightward.
+    * the value of the commands could be adjusted in play.py.
+- play.py also supports angular and linear velocity tracking
 
 ## Video Demonstration
 
 ### Simulation in IsaacLab
-- **Pointfoot Blind Flat**:
+- **multi-terrain-traversal**:
 
-![play_isaaclab](./media/play_isaaclab.gif)
-### Simulation in Mujoco
-- **Pointfoot Blind Flat**:
+![multi-terrain-traversal](./media/multi-terrain-traversal.gif)
 
-![play_mujoco](./media/play_mujoco.gif)
+- **high accuracy speed tracking**:
 
-## Acknowledgements
+![speed tracking](./media/speed_tracking.gif)
 
-This project uses the following open-source libraries:
-- [IsaacLabExtensionTemplate](https://github.com/isaac-sim/IsaacLabExtensionTemplate)
-- [rsl_rl](https://github.com/leggedrobotics/rsl_rl/tree/master)
-- [bipedal_locomotion_isaaclab](https://github.com/Andy-xiong6/bipedal_locomotion_isaaclab)
-- [tron1-rl-isaaclab](https://github.com/limxdynamics/tron1-rl-isaaclab)
+<p align="center">
+    <img alt="CLEARLAB" src="./media/speed_tracking.PNG" height="200">
+</p>
 
-**Contributors:**
-- Hongwei Xiong 
-- Bobin Wang
-- Wen
-- Haoxiang Luo
-- Junde Guo
+- **high pushing limit**:
+
+![pushing](./media/push.gif)
